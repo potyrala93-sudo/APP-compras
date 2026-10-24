@@ -65,6 +65,10 @@
     const m = e.message || String(e);
     if (/anonymous sign-ins are disabled/i.test(m)) return 'O login anônimo está desligado no Supabase. Veja o passo 3 do guia de instalação.';
     if (/JWT|refresh token/i.test(m)) return 'Sua sessão expirou. Entre novamente.';
+    if (/bucket not found/i.test(m)) return 'Falta rodar o schema.sql novo no Supabase (SQL Editor › Run).';
+    if (/could not find the function|function .* does not exist|schema cache/i.test(m)) return 'O banco está desatualizado. Rode o schema.sql novo no SQL Editor do Supabase.';
+    if (/row-level security|violates row-level/i.test(m)) return 'O banco recusou o envio. Rode o schema.sql novo no SQL Editor do Supabase.';
+    if (/payload too large|exceeded the maximum/i.test(m)) return 'Arquivo grande demais.';
     return m;
   }
   class AppError extends Error {

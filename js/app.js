@@ -624,19 +624,34 @@
     if (blob !== f && blob.type === 'image/jpeg') return (f.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
     return f.name || ('foto-' + Date.now() + '.jpg');
   }
+  // abre a foto de qualquer jeito que o navegador conseguir
+  async function abrirImagem(file) {
+    try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch (_) {}
+    try { return await createImageBitmap(file); } catch (_) {}
+    const url = URL.createObjectURL(file);
+    try {
+      return await new Promise((ok, falha) => { const i = new Image(); i.onload = () => ok(i); i.onerror = falha; i.src = url; });
+    } catch (_) {
+      throw new Error(/heic|heif/i.test(file.type + file.name)
+        ? 'Esta foto está no formato HEIC, que o navegador não abre. Use "Tirar foto" ou escolha uma foto em JPG.'
+        : 'Não foi possível abrir esta foto. Tente outra ou use "Tirar foto".');
+    }
+  }
   async function recortarQuadrado(file, lado) {
-    const bmp = await createImageBitmap(file);
-    const m = Math.min(bmp.width, bmp.height);
+    const bmp = await abrirImagem(file);
+    const w = bmp.width || bmp.naturalWidth, hh = bmp.height || bmp.naturalHeight;
+    const m = Math.min(w, hh);
     const c = document.createElement('canvas'); c.width = lado; c.height = lado;
-    c.getContext('2d').drawImage(bmp, (bmp.width - m) / 2, (bmp.height - m) / 2, m, m, 0, 0, lado, lado);
+    c.getContext('2d').drawImage(bmp, (w - m) / 2, (hh - m) / 2, m, m, 0, 0, lado, lado);
     return new Promise((r, j) => c.toBlob((b) => (b ? r(b) : j(new Error('Não foi possível ler a foto.'))), 'image/jpeg', 0.85));
   }
   async function comprimir(file) {
     if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.size < 350 * 1024) return file;
     try {
-      const bmp = await createImageBitmap(file);
-      const max = 1600; const k = Math.min(1, max / Math.max(bmp.width, bmp.height));
-      const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+      const bmp = await abrirImagem(file);
+      const w = bmp.width || bmp.naturalWidth, hh = bmp.height || bmp.naturalHeight;
+      const max = 1600; const k = Math.min(1, max / Math.max(w, hh));
+      const c = document.createElement('canvas'); c.width = Math.round(w * k); c.height = Math.round(hh * k);
       c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
       const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.82));
       return blob && blob.size < file.size ? blob : file;
@@ -1099,8 +1114,8 @@
       <div class="dlg-head"><div class="row"><span id="p-av">${avatar(me, 'big')}</span><div><h2>${h(me.nome)}</h2><p class="small muted">${h(me.usuario)} · ${h(me.cargo)} · ${h(me.cdc)}</p></div></div>
         <button class="icon-btn" data-x aria-label="Fechar">${ic('x')}</button></div>
       <div class="row photo-actions">
-        <label class="btn btn-ghost btn-sm">${ic('camera', 18)} Tirar foto<input type="file" id="p-cam" accept="image/*" capture="user" hidden></label>
-        <label class="btn btn-ghost btn-sm">${ic('image', 18)} Escolher da galeria<input type="file" id="p-gal" accept="image/*" hidden></label>
+        <label class="btn btn-ghost btn-sm">${ic('camera', 18)} Tirar foto<input type="file" id="p-cam" accept="image/*" capture="user" class="sr"></label>
+        <label class="btn btn-ghost btn-sm">${ic('image', 18)} Escolher da galeria<input type="file" id="p-gal" accept="image/*" class="sr"></label>
         ${me.foto_url ? '<button class="btn btn-danger btn-sm" id="p-rmfoto">Remover foto</button>' : ''}
       </div>
       <hr class="sep">
@@ -1138,13 +1153,15 @@
     </div>`);
     $('[data-x]', d).onclick = () => d.close();
     const trocarFoto = async (e) => {
-      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      const f = e.target.files && e.target.files[0]; e.target.value = ''; if (!f) return;
       if (!navigator.onLine) return toast('Precisa de internet para trocar a foto.', { erro: true });
+      if (typeof Store.salvarFoto !== 'function') return toast('O arquivo js/store.js no GitHub está desatualizado. Envie o store.js novo.', { erro: true, tempo: 9000 });
       try {
+        toast('Salvando foto…');
         const blob = await recortarQuadrado(f, 320);
         $('#p-av', d).innerHTML = avatar({ nome: me.nome, foto_url: URL.createObjectURL(blob) }, 'big');
         await Store.salvarFoto(blob); toast('Foto atualizada.'); d.close(); shell(); render(true);
-      } catch (ex) { toast(ex.message, { erro: true }); }
+      } catch (ex) { toast('A foto não foi salva: ' + ex.message, { erro: true, tempo: 10000 }); }
     };
     $('#p-cam', d).onchange = trocarFoto; $('#p-gal', d).onchange = trocarFoto;
     const prm = $('#p-rmfoto', d);

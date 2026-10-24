@@ -1,5 +1,5 @@
 /* Service worker: deixa o app abrir e funcionar sem internet */
-const VERSAO = 'compras-v3';
+const VERSAO = 'compras-v4';
 const ARQUIVOS = [
   './', 'index.html', 'styles.css', 'config.js', 'js/store.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',

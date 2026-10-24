@@ -200,6 +200,17 @@ textarea.input { min-height: 92px; resize: vertical; }
   background: var(--leaf); color: var(--euca); font-weight: 800; font-size: .9rem;
 }
 .user-btn .who { text-align: left; line-height: 1.15; }
+.avatar { position: relative; overflow: hidden; flex: none; }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.avatar.big { width: 72px; height: 72px; font-size: 1.4rem; }
+.avatar.sm { width: 28px; height: 28px; font-size: .7rem; }
+.photo-actions { gap: 8px; }
+.photo-actions label { cursor: pointer; }
+.pass { position: relative; }
+.pass .input { padding-right: 52px; }
+.pass-eye { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 44px; height: 40px; border: 0; background: none; color: var(--muted); cursor: pointer; border-radius: var(--radius-m); display: grid; place-items: center; }
+.pass-eye[aria-pressed="true"] { color: var(--euca); }
+.temp-pass { font-size: 2rem; font-weight: 800; letter-spacing: .15em; text-align: center; background: var(--safety); color: var(--safety-ink); border-radius: var(--radius-m); padding: 10px; font-stretch: 87.5%; }
 .user-btn .who small { display: block; color: var(--muted); font-size: .78rem; }
 
 .layout { display: block; }
@@ -289,6 +300,12 @@ main.view { padding: 20px 16px 110px; max-width: 920px; margin: 0 auto; }
   border: 1.5px solid var(--line-strong); background: var(--surface); font-weight: 600; font-size: .9rem;
   display: inline-flex; align-items: center; gap: 6px;
 }
+@media (min-width: 620px) { .chips { flex-wrap: wrap; overflow: visible; } }
+.search { position: relative; margin-bottom: 12px; }
+.search .s-ico { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--muted); display: flex; pointer-events: none; }
+.search .input { padding-left: 44px; }
+.search-none { margin: -4px 0 12px; }
+.picker .pick[hidden] { display: none; }
 .chip[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 .chip .n { font-size: .78rem; opacity: .75; }
 

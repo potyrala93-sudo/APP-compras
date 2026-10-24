@@ -8,7 +8,7 @@
   // ---------- Listas ----------
   const CDCS = ['SMA - Suzano', 'CBO - Capão Bonito', 'CBO - Bracell', 'Santa Branca - Suzano', 'Caçapava - Suzano', 'Escavadeira - Suzano'];
   const CARGOS = ['Coordenador', 'Supervisor', 'Encarregado', 'Comprador', 'Analista de Custo', 'Administrativo'];
-  const DEPARTAMENTOS = ['Oficina', 'Almoxarifado', 'Qualidade', 'Segurança', 'Supervisão', 'Coordenação'];
+  const DEPARTAMENTOS = ['Oficina', 'Almoxarifado', 'Qualidade', 'Segurança', 'Supervisão', 'Coordenação', 'Administrativo', 'RH'];
   const TIPOS = ['Planejado', 'Emergencial', 'Regularização'];
   const STATUS_COMPRA = ['Pendente', 'Em cotação', 'Em transporte', 'Aguardando retirada', 'Finalizado'];
   const UNIDADES = ['un', 'pç', 'cx', 'jogo', 'par', 'kg', 'L', 'm', 'rolo', 'galão', 'balde', 'saco'];
@@ -23,9 +23,12 @@
     cart: 'M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 1.9-1.4L21 8H6.2M10 20h.01M17 20h.01',
     db: 'M12 3c4.4 0 8 1.3 8 3s-3.6 3-8 3-8-1.3-8-3 3.6-3 8-3zM4 6v6c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6',
     bell: 'M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0',
+    image: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01',
     camera: 'M4 8h3l2-3h6l2 3h3a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z',
     file: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5zM14 3v5h5M9 13h6M9 17h6',
     x: 'M6 6l12 12M18 6L6 18',
+    eye: 'M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z',
+    search: 'M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4',
     alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
     tick: 'M5 12l5 5L20 7',
     wa: 'M3 21l1.7-5A8.5 8.5 0 1 1 8 19.3L3 21zM9 9.5c0 3 2.5 5.5 5.5 5.5l1.5-1.5-2-1-1 1c-1-.4-2-1.4-2.4-2.4l1-1-1-2L9 9.5z',
@@ -49,6 +52,11 @@
     return `<span class="due fine">Faltam ${n} dias</span>`;
   }
   const iniciais = (n) => String(n || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]).join('').toUpperCase();
+  // foto do usuário, com as iniciais por baixo caso a imagem não carregue (ex.: sem internet)
+  function avatar(pessoa, cls) {
+    pessoa = pessoa || {};
+    return `<span class="avatar${cls ? ' ' + cls : ''}">${h(iniciais(pessoa.nome))}${pessoa.foto_url ? `<img src="${h(pessoa.foto_url)}" alt="" onerror="this.remove()">` : ''}</span>`;
+  }
   function resumoItens(itens) {
     if (!itens || !itens.length) return 'Sem itens';
     const r = itens[0].produto; const n = itens.length - 1;
@@ -128,19 +136,21 @@
     base: { nome: 'Base de dados', curto: 'Base', icone: 'db' },
   };
   function secoesDo(cargo) {
-    const s = [];
-    if (!['Comprador', 'Analista de Custo'].includes(cargo)) s.push('solicitacao', 'pedidos', 'status');
-    if (cargo === 'Coordenador') s.push('aprovacao-coordenador');
+    const s = ['solicitacao', 'pedidos', 'status'];
+    if (cargo === 'Coordenador') s.push('aprovacao-coordenador', 'base');
     if (cargo === 'Analista de Custo') s.push('aprovacao-analista');
     if (cargo === 'Comprador') s.push('compras');
-    if (['Coordenador', 'Analista de Custo', 'Comprador'].includes(cargo)) s.push('base');
     return s;
+  }
+  // tela que abre primeiro: a de trabalho do cargo
+  function secaoInicial(cargo) {
+    return { 'Analista de Custo': 'aprovacao-analista', Comprador: 'compras', Coordenador: 'aprovacao-coordenador' }[cargo] || 'solicitacao';
   }
   function contagem(sec, v) {
     const me = S.perfil;
     if (sec === 'aprovacao-coordenador') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'coordenador').length;
     if (sec === 'aprovacao-analista') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'analista').length;
-    if (sec === 'compras') return v.pedidos.filter((p) => p.etapa === 'compras').length;
+    if (sec === 'compras') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'compras').length;
     if (sec === 'pedidos') return v.pedidos.filter((p) => p.solicitante_id === me.id && p.etapa === 'compras' && ['Aguardando retirada', 'Finalizado'].includes(p.status_compra)).length;
     return 0;
   }
@@ -186,23 +196,130 @@
         <div><h1>Entrar</h1><p class="muted">Use seu usuário e senha.</p></div>
         ${!navigator.onLine ? `<div class="alert alert-warn">${ic('alert', 18)}<span><strong>Sem internet</strong>O primeiro acesso neste aparelho precisa de conexão.</span></div>` : ''}
         ${msg ? `<div class="alert alert-info">${h(msg)}</div>` : ''}
-        <div class="field"><label for="l-user">Usuário</label><input id="l-user" class="input" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
-        <div class="field"><label for="l-pass">Senha</label><input id="l-pass" type="password" class="input" autocomplete="current-password" required></div>
+        <div class="field"><label for="l-user">Usuário</label><input id="l-user" class="input" autocomplete="username" autocapitalize="none" spellcheck="false" required value="${h(lembrado())}"></div>
+        <div class="field"><label for="l-pass">Senha</label>
+          <div class="pass"><input id="l-pass" type="password" class="input" autocomplete="current-password" required>
+            <button type="button" class="pass-eye" id="l-eye" aria-label="Mostrar senha" aria-pressed="false">${ic('eye', 20)}</button></div></div>
+        <div class="row" style="justify-content:space-between">
+          <label class="row small" style="gap:8px"><input type="checkbox" id="l-lembrar" ${lembrado() ? 'checked' : ''}> Lembrar meu usuário</label>
+          <button type="button" class="linklike small" id="to-rec">Esqueci minha senha</button>
+        </div>
         <p class="form-error" id="l-err" role="alert"></p>
         <button class="btn btn-block" id="l-btn">Entrar</button>
       </form>
       <p class="auth-switch">Ainda não tem usuário? <button class="linklike" id="to-cad">Criar usuário</button></p>
     </div></div>`;
     $('#to-cad').onclick = telaCadastro;
+    $('#to-rec').onclick = () => telaRecuperar($('#l-user').value.trim());
+    olhoSenha($('#l-eye'), $('#l-pass'));
     $('#f-login').addEventListener('submit', async (e) => {
       e.preventDefault();
       const u = $('#l-user').value.trim(), s = $('#l-pass').value;
       if (!u || !s) { $('#l-err').textContent = 'Preencha usuário e senha.'; return; }
       $('#l-btn').disabled = true; $('#l-btn').textContent = 'Entrando…'; $('#l-err').textContent = '';
-      try { await Store.entrar(u, s); await iniciarApp(); }
+      try {
+        await Store.entrar(u, s);
+        try { if ($('#l-lembrar').checked) localStorage.setItem('compras.usuario', u.toLowerCase()); else localStorage.removeItem('compras.usuario'); } catch (_) {}
+        if (await Store.precisaTrocarSenha()) return telaSenhaNova(s);
+        await iniciarApp();
+      }
       catch (err) { $('#l-err').textContent = err.message; $('#l-btn').disabled = false; $('#l-btn').textContent = 'Entrar'; }
     });
-    $('#l-user').focus();
+    ($('#l-user').value ? $('#l-pass') : $('#l-user')).focus();
+  }
+  function lembrado() { try { return localStorage.getItem('compras.usuario') || ''; } catch (_) { return ''; } }
+  function olhoSenha(btn, ...inputs) {
+    btn.onclick = () => {
+      const ver = inputs[0].type === 'password';
+      inputs.forEach((i) => { i.type = ver ? 'text' : 'password'; });
+      btn.setAttribute('aria-pressed', String(ver)); btn.setAttribute('aria-label', ver ? 'Esconder senha' : 'Mostrar senha');
+    };
+  }
+
+  // ---------- Esqueci minha senha ----------
+  function telaRecuperar(usuario) {
+    app().innerHTML = `<div class="auth"><div class="auth-box">
+      <div class="auth-brand"><span class="tag big">Compras</span></div>
+      <div class="auth-card" id="rec">
+        <div><h1>Recuperar senha</h1><p class="muted">Informe seu usuário. Se o seu WhatsApp automático estiver ativo, você recebe um código. Se não, o coordenador do seu CDC é avisado.</p></div>
+        <form class="stack" id="f-rec" novalidate>
+          <div class="field"><label for="r-user">Usuário</label><input id="r-user" class="input" autocapitalize="none" spellcheck="false" autocomplete="username" value="${h(usuario || lembrado())}" required></div>
+          <p class="form-error" id="r-err" role="alert"></p>
+          <button class="btn btn-block" id="r-btn">Recuperar senha</button>
+        </form>
+      </div>
+      <p class="auth-switch"><button class="linklike" id="to-login">Voltar para o login</button></p>
+    </div></div>`;
+    $('#to-login').onclick = () => telaLogin();
+    $('#f-rec').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const u = $('#r-user').value.trim().toLowerCase();
+      if (!u) return ($('#r-err').textContent = 'Informe o usuário.');
+      if (!navigator.onLine) return ($('#r-err').textContent = 'Precisa de internet para recuperar a senha.');
+      $('#r-btn').disabled = true; $('#r-btn').textContent = 'Enviando…'; $('#r-err').textContent = '';
+      try {
+        const r = await Store.solicitarCodigo(u);
+        if (String(r).startsWith('whatsapp')) return telaCodigo(u, String(r).split('|')[1]);
+        $('#rec').innerHTML = r === 'coordenador'
+          ? `<h1>Coordenador avisado</h1><p>O coordenador do seu CDC recebeu um aviso. Ele vai criar uma <b>senha provisória</b> e passar para você.</p>
+             <p class="muted">Entre com ela normalmente. Na primeira vez, o app pede para você criar uma senha nova.</p>
+             <button class="btn btn-block" id="r-ok">Voltar para o login</button>`
+          : `<h1>Fale com o responsável</h1><p>Não há coordenador cadastrado no seu CDC para redefinir a senha. Peça ao responsável pelo sistema para redefinir pelo painel do Supabase.</p>
+             <button class="btn btn-block" id="r-ok">Voltar para o login</button>`;
+        $('#r-ok').onclick = () => telaLogin();
+      } catch (ex) { $('#r-err').textContent = ex.message; $('#r-btn').disabled = false; $('#r-btn').textContent = 'Recuperar senha'; }
+    });
+    $('#r-user').focus();
+  }
+  function telaCodigo(usuario, final) {
+    $('#rec').innerHTML = `<div><h1>Digite o código</h1><p class="muted">Enviamos um código de 6 números para o seu WhatsApp${final ? ' terminado em ' + h(final) : ''}. Ele vale por 15 minutos.</p></div>
+      <form class="stack" id="f-cod" novalidate>
+        <div class="field"><label for="k-cod">Código</label><input id="k-cod" class="input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required style="font-size:1.4rem;letter-spacing:.3em"></div>
+        <div class="field"><label for="k-s1">Senha nova</label><div class="pass"><input id="k-s1" type="password" class="input" autocomplete="new-password" minlength="6" required>
+          <button type="button" class="pass-eye" id="k-eye" aria-label="Mostrar senha" aria-pressed="false">${ic('eye', 20)}</button></div></div>
+        <div class="field"><label for="k-s2">Repita a senha nova</label><input id="k-s2" type="password" class="input" autocomplete="new-password" required></div>
+        <p class="form-error" id="k-err" role="alert"></p>
+        <button class="btn btn-block" id="k-btn">Salvar senha nova</button>
+        <button type="button" class="linklike small" id="k-de-novo">Não recebi, pedir outro código</button>
+      </form>`;
+    olhoSenha($('#k-eye'), $('#k-s1'), $('#k-s2'));
+    $('#k-de-novo').onclick = () => telaRecuperar(usuario);
+    $('#f-cod').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const cod = $('#k-cod').value.trim(), s1 = $('#k-s1').value, err = $('#k-err');
+      if (!/^\d{6}$/.test(cod)) return (err.textContent = 'O código tem 6 números.');
+      if (s1.length < 6) return (err.textContent = 'A senha precisa ter pelo menos 6 caracteres.');
+      if (s1 !== $('#k-s2').value) return (err.textContent = 'As senhas não são iguais.');
+      $('#k-btn').disabled = true; err.textContent = '';
+      try { await Store.redefinirComCodigo(usuario, cod, s1); telaLogin('Senha nova salva. Entre com ela.'); $('#l-user').value = usuario; $('#l-pass').focus(); }
+      catch (ex) { err.textContent = ex.message; $('#k-btn').disabled = false; }
+    });
+    $('#k-cod').focus();
+  }
+  // depois de entrar com senha provisória
+  function telaSenhaNova(atual) {
+    app().innerHTML = `<div class="auth"><div class="auth-box">
+      <div class="auth-brand"><span class="tag big">Compras</span></div>
+      <form class="auth-card" id="f-nova" novalidate>
+        <div><h1>Crie sua senha</h1><p class="muted">Você entrou com uma senha provisória. Crie uma senha sua para continuar.</p></div>
+        <div class="field"><label for="n-s1">Senha nova</label><div class="pass"><input id="n-s1" type="password" class="input" autocomplete="new-password" minlength="6" required>
+          <button type="button" class="pass-eye" id="n-eye" aria-label="Mostrar senha" aria-pressed="false">${ic('eye', 20)}</button></div></div>
+        <div class="field"><label for="n-s2">Repita a senha nova</label><input id="n-s2" type="password" class="input" autocomplete="new-password" required></div>
+        <p class="form-error" id="n-err" role="alert"></p>
+        <button class="btn btn-block" id="n-btn">Salvar e entrar</button>
+      </form></div></div>`;
+    olhoSenha($('#n-eye'), $('#n-s1'), $('#n-s2'));
+    $('#f-nova').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const s1 = $('#n-s1').value, err = $('#n-err');
+      if (s1.length < 6) return (err.textContent = 'A senha precisa ter pelo menos 6 caracteres.');
+      if (s1 !== $('#n-s2').value) return (err.textContent = 'As senhas não são iguais.');
+      if (s1 === atual) return (err.textContent = 'Use uma senha diferente da provisória.');
+      $('#n-btn').disabled = true; err.textContent = '';
+      try { await Store.alterarSenha(atual, s1); toast('Senha criada.'); await iniciarApp(); }
+      catch (ex) { err.textContent = ex.message; $('#n-btn').disabled = false; }
+    });
+    $('#n-s1').focus();
   }
 
   function telaCadastro() {
@@ -256,7 +373,7 @@
         <div class="spacer"></div>
         <span class="net" id="net" hidden></span>
         <button class="icon-btn" id="btn-notif" aria-label="Notificações">${ic('bell')}<span class="badge" id="notif-n" hidden></span></button>
-        <button class="user-btn" id="btn-perfil" aria-label="Meu perfil"><span class="avatar">${h(iniciais(me.nome))}</span>
+        <button class="user-btn" id="btn-perfil" aria-label="Meu perfil">${avatar(me)}
           <span class="who" style="display:none"><b>${h(me.nome.split(' ')[0])}</b><small>${h(me.cargo)}</small></span></button>
       </header>
       <div class="layout">
@@ -293,7 +410,7 @@
     if (!S.perfil || !$('#view')) return;
     const secs = secoesDo(S.perfil.cargo);
     let { sec, params } = rota();
-    if (!secs.includes(sec)) { sec = secs[0]; history.replaceState(null, '', '#/' + sec); }
+    if (!secs.includes(sec)) { sec = secaoInicial(S.perfil.cargo); history.replaceState(null, '', '#/' + sec); }
     const view = $('#view');
     // não atrapalha quem está digitando
     if (!forcar && view.dataset.sec === sec && (view.contains(document.activeElement) && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName) || $('[data-sujo="1"]', view))) {
@@ -371,8 +488,12 @@
         <section class="panel stack">
           <div class="panel-title"><h2>Fotos e orçamentos</h2></div>
           <div class="field"><span class="label">Fotos do produto</span>
-            <label class="dropzone"><span class="dz-ico">${ic('camera')}</span><span><b>Tirar ou escolher fotos</b><br><span class="small muted">Quantas precisar</span></span>
-              <input type="file" id="in-fotos" accept="image/*" multiple></label>
+            <div class="grid-2">
+              <label class="dropzone"><span class="dz-ico">${ic('camera')}</span><span><b>Tirar foto</b><br><span class="small muted">Abre a câmera</span></span>
+                <input type="file" id="in-camera" accept="image/*" capture="environment"></label>
+              <label class="dropzone"><span class="dz-ico">${ic('image')}</span><span><b>Escolher da galeria</b><br><span class="small muted">Quantas precisar</span></span>
+                <input type="file" id="in-fotos" accept="image/*" multiple></label>
+            </div>
             <div class="thumbs" id="lst-fotos"></div></div>
           <div class="field"><span class="label">Orçamentos (até 3)</span>
             <label class="dropzone" id="dz-orc"><span class="dz-ico">${ic('file')}</span><span><b>Anexar orçamento</b><br><span class="small muted">PDF ou foto</span></span>
@@ -438,10 +559,12 @@
       $(el).innerHTML = anexosSol[k].map((f, i) => `<div class="file-chip">${ic('file', 18)}<span class="name">${h(f.nome)}</span><span class="small muted">${Math.max(1, Math.round(f.blob.size / 1024))} KB</span><button type="button" class="icon-btn" data-rm="${k}" data-i="${i}" aria-label="Remover ${h(f.nome)}">${ic('x', 16)}</button></div>`).join('');
       if (k === 'orcamentos') $('#dz-orc').hidden = anexosSol.orcamentos.length >= 3;
     };
-    $('#in-fotos').addEventListener('change', async (e) => {
+    const addFotos = async (e) => {
       for (const f of e.target.files) { const blob = await comprimir(f); anexosSol.fotos.push({ categoria: 'foto', nome: nomeArquivo(f, blob), mime: blob.type || f.type, blob, url: URL.createObjectURL(blob) }); }
       e.target.value = ''; mostrarFotos(); marcar();
-    });
+    };
+    $('#in-fotos').addEventListener('change', addFotos);
+    $('#in-camera').addEventListener('change', addFotos);
     $('#in-orc').addEventListener('change', async (e) => {
       for (const f of e.target.files) {
         if (anexosSol.orcamentos.length >= 3) { toast('Máximo de 3 orçamentos.', { erro: true }); break; }
@@ -499,7 +622,14 @@
   }
   function nomeArquivo(f, blob) {
     if (blob !== f && blob.type === 'image/jpeg') return (f.name || 'foto').replace(/\.[^.]+$/, '') + '.jpg';
-    return f.name || 'arquivo';
+    return f.name || ('foto-' + Date.now() + '.jpg');
+  }
+  async function recortarQuadrado(file, lado) {
+    const bmp = await createImageBitmap(file);
+    const m = Math.min(bmp.width, bmp.height);
+    const c = document.createElement('canvas'); c.width = lado; c.height = lado;
+    c.getContext('2d').drawImage(bmp, (bmp.width - m) / 2, (bmp.height - m) / 2, m, m, 0, 0, lado, lado);
+    return new Promise((r, j) => c.toBlob((b) => (b ? r(b) : j(new Error('Não foi possível ler a foto.'))), 'image/jpeg', 0.85));
   }
   async function comprimir(file) {
     if (!file.type.startsWith('image/') || file.type === 'image/gif' || file.size < 350 * 1024) return file;
@@ -558,6 +688,29 @@
   function cabecalho(p) {
     return `<div class="order-head">${numeroTag(p)}${estado(p)}<span class="kind ${h(p.tipo_pedido)}">${h(p.tipo_pedido)}</span><span class="when">${p._pendente ? 'Aguardando envio · ' : ''}${dataBR(p.data_pedido)}</span></div>`;
   }
+  // ---------- Busca por produto ----------
+  const buscas = {};
+  const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  function textoBusca(p) {
+    return semAcento([p.numero, p.equipe, p.frota, p.tipo_pedido, p.motivo, ...(p.itens || []).map((i) => i.produto + ' ' + (i.descricao || ''))].join(' '));
+  }
+  function campoBusca(sec, placeholder) {
+    return `<div class="search"><span class="s-ico">${ic('search', 20)}</span>
+      <input type="search" class="input" id="busca-${sec}" placeholder="${h(placeholder)}" value="${h(buscas[sec] || '')}" aria-label="Buscar produto" autocomplete="off">
+      </div><p class="small muted search-none" id="busca-vazia-${sec}" hidden>Nenhum pedido com esse produto.</p>`;
+  }
+  // filtra sem redesenhar a tela (não perde o que está digitado)
+  function ligarBusca(view, sec, seletor) {
+    const inp = $('#busca-' + sec, view); if (!inp) return;
+    const aplicar = () => {
+      const q = semAcento(inp.value.trim()); buscas[sec] = inp.value;
+      let vis = 0; const itens = $$(seletor, view);
+      itens.forEach((el) => { const ok = !q || q.split(/\s+/).every((t) => el.dataset.busca.includes(t)); el.hidden = !ok; if (ok) vis++; });
+      $('#busca-vazia-' + sec, view).hidden = !(q && itens.length && !vis);
+    };
+    inp.addEventListener('input', aplicar);
+    aplicar();
+  }
   function vazio(titulo, texto, acaoHtml) { return `<div class="empty"><strong>${h(titulo)}</strong>${h(texto)}${acaoHtml || ''}</div>`; }
   function chips(nome, ops, atual) {
     return `<div class="chips" role="group" aria-label="Filtro">${ops.map((o) => `<button class="chip" data-chip="${nome}" data-v="${h(o.v)}" aria-pressed="${o.v === atual}">${h(o.t)} <span class="n">${o.n}</span></button>`).join('')}</div>`;
@@ -581,12 +734,14 @@
     view.innerHTML = `
       <div class="page-head"><div><h1>Pedidos</h1><p>Somente os pedidos feitos por você.</p></div>
         <button class="btn btn-ghost" data-go="solicitacao">${ic('plus', 18)} Nova solicitação</button></div>
+      ${campoBusca('pedidos', 'Buscar produto, frota ou nº do pedido')}
       ${chips('f', [{ v: 'andamento', t: 'Em andamento', n: grupos.andamento.length }, { v: 'finalizados', t: 'Finalizados', n: grupos.finalizados.length }, { v: 'negados', t: 'Negados', n: grupos.negados.length }], f)}
       <div>${lista.length ? lista.map((p) => cartaoMeu(p, v)).join('') : vazio(
         f === 'finalizados' ? 'Nenhum pedido finalizado' : f === 'negados' ? 'Nenhum pedido negado' : 'Nenhum pedido em andamento',
         f === 'andamento' ? 'Quando você enviar uma solicitação, ela aparece aqui.' : 'Os pedidos aparecem aqui quando chegam a essa situação.',
         f === 'andamento' ? '<br><button class="btn" data-go="solicitacao">Fazer uma solicitação</button>' : '')}</div>`;
     ligarChips(view, params, 'pedidos');
+    ligarBusca(view, 'pedidos', 'article.order');
     $$('[data-go]', view).forEach((b) => (b.onclick = () => ir(b.dataset.go)));
     $$('[data-status]', view).forEach((b) => (b.onclick = () => ir('status', { id: b.dataset.status })));
     $$('[data-receber]', view).forEach((b) => (b.onclick = async () => {
@@ -599,7 +754,7 @@
   function cartaoMeu(p, v) {
     const pronto = p.etapa === 'compras' && ['Aguardando retirada', 'Finalizado', 'Em transporte'].includes(p.status_compra);
     const ultimaObs = (v.eventos[p.id] || []).filter((e) => e.autor_cargo === 'Comprador' && e.detalhe).pop();
-    return `<article class="order">
+    return `<article class="order" data-busca="${h(textoBusca(p))}">
       ${cabecalho(p)}
       <div class="order-title">${h(resumoItens(p.itens))}</div>
       ${fatosPrincipais(p, { semSolicitante: true })}
@@ -635,11 +790,13 @@
     view.innerHTML = `
       <div class="page-head"><div><h1>Status</h1><p>Cada movimentação do seu pedido, em ordem.</p></div></div>
       <div class="status-layout">
+        <div class="stack" style="gap:8px">
+        ${campoBusca('status', 'Buscar produto')}
         <div class="picker" role="list" aria-label="Seus pedidos">
-          ${meus.map((p) => `<button class="pick" role="listitem" data-pick="${h(p.id)}" aria-current="${p.id === sel.id}">
+          ${meus.map((p) => `<button class="pick" role="listitem" data-pick="${h(p.id)}" data-busca="${h(textoBusca(p))}" aria-current="${p.id === sel.id}">
             <span class="top">${numeroTag(p)}<span class="small muted">${dataBR(p.data_pedido)}</span></span>
             <span class="desc">${h(resumoItens(p.itens))}</span>${estado(p)}</button>`).join('')}
-        </div>
+        </div></div>
         <section class="panel">
           <div class="order-head" style="margin-bottom:12px">${numeroTag(sel, true)}<span class="kind ${h(sel.tipo_pedido)}">${h(sel.tipo_pedido)}</span></div>
           <h2 style="margin-bottom:4px">${h(resumoItens(sel.itens))}</h2>
@@ -652,6 +809,7 @@
         </section>
       </div>`;
     $$('[data-pick]', view).forEach((b) => (b.onclick = () => ir('status', { id: b.dataset.pick })));
+    ligarBusca(view, 'status', '.pick');
     const g = $('[data-go-ped]', view); if (g) g.onclick = () => ir('pedidos');
   }
   function percurso(p, evs) {
@@ -702,7 +860,7 @@
         <p>${coord ? 'Solicitações do CDC ' + h(S.perfil.cdc) + ' esperando sua decisão.' : 'Pedidos já aprovados pelo coordenador do CDC ' + h(S.perfil.cdc) + '.'}</p></div></div>
       ${chips('f', [{ v: 'aguardando', t: 'Aguardando decisão', n: aguardando.length }, { v: 'feitos', t: 'Já analisados', n: analisados.length }], f)}
       ${lista.length ? ordemGrupos.map((uid) => `<section class="group">
-          <div class="group-head"><span class="avatar">${h(iniciais(nomeDe(uid)))}</span><h2>${h(nomeDe(uid))}</h2><span class="count">${porUsuario[uid].length} pedido${porUsuario[uid].length > 1 ? 's' : ''}</span></div>
+          <div class="group-head">${avatar(S.perfis[uid] || { nome: nomeDe(uid) })}<h2>${h(nomeDe(uid))}</h2><span class="count">${porUsuario[uid].length} pedido${porUsuario[uid].length > 1 ? 's' : ''}</span></div>
           ${porUsuario[uid].map((p) => cartaoAprovacao(p, v, f === 'aguardando')).join('')}
         </section>`).join('')
         : vazio(f === 'aguardando' ? 'Nada para aprovar agora' : 'Nenhum pedido analisado ainda', f === 'aguardando' ? 'Quando chegar uma solicitação nova, ela aparece aqui e você recebe um aviso.' : 'Os pedidos que você aprovar ou negar ficam listados aqui.')}`;
@@ -716,12 +874,12 @@
       if (!r.ok) return;
       if (!aprovar && r.texto.length < 5) return toast('Escreva a justificativa da recusa.', { erro: true });
       const fn = coord ? Store.decidirCoordenador : Store.decidirAnalista;
-      const link = linkWhats(p.solicitante_id, `Olá! Seu pedido nº ${p.numero} (${resumoItens(p.itens)}) foi ${aprovar ? 'APROVADO' : 'NEGADO'} pelo ${coord ? 'coordenador' : 'analista de custo'}.${!aprovar ? ' Justificativa: ' + r.texto : ''}`);
+      const link = linkWhats(p.solicitante_id, `Olá! Seu pedido de ${resumoItens(p.itens)} foi ${aprovar ? 'APROVADO' : 'NEGADO'} pelo ${coord ? 'coordenador' : 'analista de custo'}.${!aprovar ? ' Justificativa: ' + r.texto : ''}`);
       await executarAcao(() => fn(p.id, aprovar, r.texto), aprovar ? `Pedido nº ${p.numero} aprovado.` : `Pedido nº ${p.numero} negado.`, link);
     }));
   }
   function cartaoAprovacao(p, v, comAcoes) {
-    const wa = linkWhats(p.solicitante_id, `Olá! Sobre o seu pedido nº ${p.numero} (${resumoItens(p.itens)}):`);
+    const wa = linkWhats(p.solicitante_id, `Olá! Sobre o seu pedido de ${resumoItens(p.itens)}:`);
     return `<article class="order">
       ${cabecalho(p)}
       ${fatosPrincipais(p)}
@@ -747,8 +905,7 @@
   //   Departamento de Compras
   // =========================================================
   function vCompras(view, v, params) {
-    const cdcF = params.get('cdc') || '';
-    const base = v.pedidos.filter((p) => !cdcF || p.cdc === cdcF);
+    const base = v.pedidos.filter((p) => p.cdc === S.perfil.cdc);
     const ativos = base.filter((p) => p.etapa === 'compras');
     const recebidos = base.filter((p) => p.etapa === 'recebido');
     const f = params.get('f') || 'ativos';
@@ -757,15 +914,11 @@
     else if (STATUS_COMPRA.includes(f)) lista = ativos.filter((p) => (p.status_compra || 'Pendente') === f);
     else lista = ativos;
     lista = lista.slice().sort((a, b) => String(a.data_necessidade).localeCompare(String(b.data_necessidade)));
-    const cdcsComPedido = Array.from(new Set(v.pedidos.map((p) => p.cdc))).sort();
     view.innerHTML = `
-      <div class="page-head"><div><h1>Departamento de Compras</h1><p>Pedidos aprovados pelo coordenador e pelo analista. Cada um fica aqui até o solicitante confirmar que recebeu.</p></div>
-        <div class="field" style="min-width:220px"><label for="f-cdc" class="small">CDC</label>
-          <select id="f-cdc" class="input"><option value="">Todos os CDCs</option>${cdcsComPedido.map((c) => `<option ${c === cdcF ? 'selected' : ''}>${h(c)}</option>`).join('')}</select></div></div>
+      <div class="page-head"><div><h1>Departamento de Compras</h1><p>Pedidos do CDC ${h(S.perfil.cdc)} aprovados pelo coordenador e pelo analista. Cada um fica aqui até o solicitante confirmar que recebeu.</p></div></div>
       ${chips('f', [{ v: 'ativos', t: 'Todos em compra', n: ativos.length }, ...STATUS_COMPRA.map((s) => ({ v: s, t: s, n: ativos.filter((p) => (p.status_compra || 'Pendente') === s).length })), { v: 'recebidos', t: 'Recebidos', n: recebidos.length }], f)}
       <div>${lista.length ? lista.map((p) => cartaoCompra(p, v)).join('') : vazio('Nenhum pedido aqui', f === 'recebidos' ? 'Pedidos confirmados pelos solicitantes aparecem aqui.' : 'Quando o analista de custo aprovar um pedido, ele chega aqui.')}</div>`;
     ligarChips(view, params, 'compras');
-    $('#f-cdc', view).onchange = (e) => { const p = Object.fromEntries(params); p.cdc = e.target.value; ir('compras', p); };
     $$('form[data-compra]', view).forEach((form) => {
       form.addEventListener('input', () => { form.dataset.sujo = '1'; });
       form.addEventListener('submit', async (e) => {
@@ -777,7 +930,7 @@
         if (st === atual && !obs) return toast('Mude o status ou escreva uma observação.', { erro: true });
         delete form.dataset.sujo;
         const mudou = st !== atual;
-        const link = linkWhats(p.solicitante_id, `Pedido nº ${p.numero} (${resumoItens(p.itens)}): ${mudou ? 'status ' + st.toUpperCase() + '. ' : ''}${obs}`);
+        const link = linkWhats(p.solicitante_id, `Seu pedido de ${resumoItens(p.itens)}: ${mudou ? 'status ' + st.toUpperCase() + '. ' : ''}${obs}`);
         await executarAcao(() => Store.atualizarCompra(p.id, mudou ? st : null, obs), `Pedido nº ${p.numero} atualizado.`, link);
       });
     });
@@ -788,7 +941,7 @@
     const sol = S.perfis[p.solicitante_id];
     return `<article class="order">
       ${cabecalho(p)}
-      ${fatosPrincipais(p, { cdc: true })}
+      ${fatosPrincipais(p)}
       <p class="small muted">Solicitante: <b>${h(nomeDe(p.solicitante_id))}</b>${sol ? ' (' + h(sol.cargo) + ')' : ''} · ${h(p.departamento)}${p.equipe_tipo ? (p.equipe_tipo === 'Mecanizado' ? ' · Equipe mecanizada' : ' · Equipe manual') : ''}</p>
       ${tabelaItens(p.itens)}
       <div class="reason"><span class="lbl">Por que precisa</span>${h(p.motivo)}</div>
@@ -832,8 +985,11 @@
         ${equipes.map((e) => `<tr><td>${h(e.cdc)}</td><td><b>${h(e.nome)}</b></td><td>${h(e.tipo)}</td>${pode ? `<td><button class="btn btn-danger btn-sm" data-rm-eq="${e.id}">Remover</button></td>` : ''}</tr>`).join('') || `<tr><td colspan="4" class="muted">Nenhuma equipe cadastrada para ${h(me.cdc)}.</td></tr>`}
         </tbody></table></div>`;
     } else {
-      corpo = `<div class="table-wrap"><table class="data"><thead><tr><th>Nome</th><th>Usuário</th><th>CDC</th><th>Cargo</th><th>WhatsApp</th></tr></thead><tbody>
-        ${usuarios.map((u) => `<tr><td>${h(u.nome)}</td><td>${h(u.usuario)}</td><td>${h(u.cdc)}</td><td>${h(u.cargo)}</td><td>${h(u.whatsapp || '')}</td></tr>`).join('')}
+      const podeReset = me.cargo === 'Coordenador';
+      corpo = `<p class="muted small" style="margin-bottom:12px">Esqueceu a senha? ${podeReset ? 'Use <b>Senha provisória</b>: o app cria uma senha temporária para você passar à pessoa, e ela cria uma nova no primeiro acesso.' : ''}</p>
+        <div class="table-wrap"><table class="data"><thead><tr><th>Nome</th><th>Usuário</th><th>CDC</th><th>Cargo</th><th>WhatsApp</th>${podeReset ? '<th></th>' : ''}</tr></thead><tbody>
+        ${usuarios.map((u) => `<tr><td><span class="row" style="gap:8px;flex-wrap:nowrap">${avatar(u, 'sm')}${h(u.nome)}</span></td><td>${h(u.usuario)}</td><td>${h(u.cdc)}</td><td>${h(u.cargo)}</td><td>${h(u.whatsapp || '')}</td>
+          ${podeReset ? `<td>${u.id !== me.id && u.cdc === me.cdc ? `<button class="btn btn-ghost btn-sm" data-reset="${h(u.id)}">Senha provisória</button>` : ''}</td>` : ''}</tr>`).join('')}
         </tbody></table></div>`;
     }
     view.innerHTML = `
@@ -851,6 +1007,22 @@
       if (!navigator.onLine) return toast('Precisa de internet para alterar equipes.', { erro: true });
       try { await Store.salvarEquipe($('#eq-nome').value, $('#eq-tipo').value); toast('Equipe adicionada.'); render(true); } catch (ex) { toast(ex.message, { erro: true }); }
     };
+    $$('[data-reset]', view).forEach((b) => (b.onclick = async () => {
+      const u = S.perfis[b.dataset.reset];
+      if (!navigator.onLine) return toast('Precisa de internet para redefinir senha.', { erro: true });
+      const r = await confirmar('Senha provisória para ' + u.nome, `A senha atual de <b>${h(u.usuario)}</b> deixa de funcionar. Você recebe uma senha provisória para passar a ele.`, { ok: 'Gerar senha provisória' });
+      if (!r.ok) return;
+      try {
+        const nova = await Store.coordRedefinirSenha(u.id);
+        const wa = linkWhats(u.id, `Olá, ${u.nome.split(' ')[0]}! Sua senha provisória do App de Compras é: ${nova}\nUsuário: ${u.usuario}\nAo entrar, o app pede para você criar uma senha nova.`);
+        const d = dialogo(`<div class="dlg"><h2>Senha provisória criada</h2>
+          <p>Passe esta senha para <b>${h(u.nome)}</b> (usuário <b>${h(u.usuario)}</b>):</p>
+          <p class="temp-pass">${h(nova)}</p>
+          <p class="small muted">No primeiro acesso, o app pede para ele criar uma senha nova. Esta tela não mostra a senha de novo.</p>
+          <div class="dlg-foot">${wa ? `<a class="btn btn-ghost" href="${h(wa)}" target="_blank" rel="noopener">${ic('wa', 18)} Enviar no WhatsApp</a>` : ''}<button class="btn" data-x>Fechar</button></div></div>`);
+        $('[data-x]', d).onclick = () => d.close();
+      } catch (ex) { toast(ex.message, { erro: true }); }
+    }));
     $$('[data-rm-eq]', view).forEach((b) => (b.onclick = async () => {
       const r = await confirmar('Remover equipe', 'Pedidos antigos dessa equipe continuam salvos.', { ok: 'Remover', perigo: true });
       if (!r.ok) return;
@@ -891,6 +1063,7 @@
 
   function destinoNotificacao(n) {
     const v = Store.visao(); const p = v.pedidos.find((x) => x.id === n.pedido_id); const c = S.perfil.cargo;
+    if (p && p.solicitante_id === S.perfil.id) return ['status', { id: p.id }];
     if (p && c === 'Coordenador' && p.etapa === 'coordenador' && p.solicitante_id !== S.perfil.id) return ['aprovacao-coordenador'];
     if (c === 'Analista de Custo') return ['aprovacao-analista'];
     if (c === 'Comprador') return ['compras', p && p.etapa === 'recebido' ? { f: 'recebidos' } : undefined];
@@ -910,7 +1083,9 @@
     $$('[data-n]', d).forEach((b) => (b.onclick = () => {
       const n = lista.find((x) => String(x.id) === b.dataset.n);
       if (!n.lida) Store.marcarLidas([n.id]);
-      d.close(); const [sec, p] = destinoNotificacao(n); ir(sec, p);
+      d.close();
+      if (n.link) { location.hash = n.link; return; }
+      const [sec, p] = destinoNotificacao(n); ir(sec, p);
     }));
   }
 
@@ -921,8 +1096,13 @@
     const me = S.perfil; const w = S.whatsapp || {};
     const perm = 'Notification' in window ? Notification.permission : 'indisponivel';
     const d = dialogo(`<div class="dlg">
-      <div class="dlg-head"><div class="row"><span class="avatar">${h(iniciais(me.nome))}</span><div><h2>${h(me.nome)}</h2><p class="small muted">${h(me.usuario)} · ${h(me.cargo)} · ${h(me.cdc)}</p></div></div>
+      <div class="dlg-head"><div class="row"><span id="p-av">${avatar(me, 'big')}</span><div><h2>${h(me.nome)}</h2><p class="small muted">${h(me.usuario)} · ${h(me.cargo)} · ${h(me.cdc)}</p></div></div>
         <button class="icon-btn" data-x aria-label="Fechar">${ic('x')}</button></div>
+      <div class="row photo-actions">
+        <label class="btn btn-ghost btn-sm">${ic('camera', 18)} Tirar foto<input type="file" id="p-cam" accept="image/*" capture="user" hidden></label>
+        <label class="btn btn-ghost btn-sm">${ic('image', 18)} Escolher da galeria<input type="file" id="p-gal" accept="image/*" hidden></label>
+        ${me.foto_url ? '<button class="btn btn-danger btn-sm" id="p-rmfoto">Remover foto</button>' : ''}
+      </div>
       <hr class="sep">
       <div class="stack">
         <h3>Notificações neste aparelho</h3>
@@ -957,6 +1137,18 @@
       </div>
     </div>`);
     $('[data-x]', d).onclick = () => d.close();
+    const trocarFoto = async (e) => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      if (!navigator.onLine) return toast('Precisa de internet para trocar a foto.', { erro: true });
+      try {
+        const blob = await recortarQuadrado(f, 320);
+        $('#p-av', d).innerHTML = avatar({ nome: me.nome, foto_url: URL.createObjectURL(blob) }, 'big');
+        await Store.salvarFoto(blob); toast('Foto atualizada.'); d.close(); shell(); render(true);
+      } catch (ex) { toast(ex.message, { erro: true }); }
+    };
+    $('#p-cam', d).onchange = trocarFoto; $('#p-gal', d).onchange = trocarFoto;
+    const prm = $('#p-rmfoto', d);
+    if (prm) prm.onclick = async () => { try { await Store.removerFoto(); toast('Foto removida.'); d.close(); shell(); render(true); } catch (ex) { toast(ex.message, { erro: true }); } };
     const pn = $('#p-notif', d); if (pn) pn.onclick = async () => { const r = await Notification.requestPermission(); toast(r === 'granted' ? 'Notificações ativadas.' : 'Notificações não foram permitidas.'); d.close(); };
     const pi = $('#p-inst', d); if (pi) pi.onclick = async () => { eventoInstalar.prompt(); await eventoInstalar.userChoice; eventoInstalar = null; d.close(); };
     $('#p-wpp', d).onsubmit = async (e) => {

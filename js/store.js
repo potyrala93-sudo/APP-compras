@@ -215,7 +215,7 @@
         sb.from('equipes').select('*').order('nome'),
         sb.from('pedidos').select('*').order('criado_em', { ascending: false }).limit(1000),
         sb.from('notificacoes').select('*').eq('para_id', S.perfil.id).order('criado_em', { ascending: false }).limit(100),
-        sb.from('perfis').select('id,usuario,nome,cdc,cargo,whatsapp,ativo'),
+        sb.from('perfis').select('id,usuario,nome,cdc,cargo,whatsapp,ativo,foto_url'),
         sb.from('whatsapp_config').select('*').maybeSingle(),
       ]);
       for (const r of [eq, ped, nt, pf]) if (r.error) throw new AppError(r.error);
@@ -417,6 +417,29 @@
   }
   async function alterarSenha(atual, nova) { await rpc('alterar_senha', { p_atual: atual, p_nova: nova }); }
 
+  // ---------- Foto de perfil ----------
+  async function salvarFoto(blob) {
+    const sb = cliente();
+    const caminho = S.perfil.id + '/foto-' + Date.now() + '.jpg';
+    const up = await sb.storage.from('avatares').upload(caminho, blob, { contentType: 'image/jpeg', upsert: false });
+    if (up.error) throw new AppError(up.error);
+    const url = sb.storage.from('avatares').getPublicUrl(caminho).data.publicUrl;
+    await rpc('salvar_foto', { p_url: url });
+    await mudarFotoLocal(url);
+  }
+  async function removerFoto() { await rpc('salvar_foto', { p_url: null }); await mudarFotoLocal(null); }
+  async function mudarFotoLocal(url) {
+    S.perfil = Object.assign({}, S.perfil, { foto_url: url });
+    if (S.perfis[S.perfil.id]) S.perfis[S.perfil.id] = Object.assign({}, S.perfis[S.perfil.id], { foto_url: url });
+    await kv.set('perfil', S.perfil); await salvarCache(); avisar('dados');
+  }
+
+  // ---------- Recuperação de senha ----------
+  async function solicitarCodigo(usuario) { await garantirSessao(); return rpc('solicitar_codigo_senha', { p_usuario: usuario }); }
+  async function redefinirComCodigo(usuario, codigo, nova) { await garantirSessao(); return rpc('redefinir_com_codigo', { p_usuario: usuario, p_codigo: codigo, p_nova: nova }); }
+  const coordRedefinirSenha = (perfilId) => rpc('coordenador_redefinir_senha', { p_perfil: perfilId });
+  async function precisaTrocarSenha() { try { return !!(await rpc('precisa_trocar_senha')); } catch (_) { return false; } }
+
   async function linkAnexo(a) {
     if (a._blob) return URL.createObjectURL(a._blob);
     if (!navigator.onLine) return null;
@@ -450,6 +473,7 @@
     atualizar, sincronizar, iniciarTempoReal, pararTempoReal, visao, criarPedido,
     decidirCoordenador, decidirAnalista, atualizarCompra, confirmarRecebimento,
     marcarLidas, salvarWhatsapp, alterarSenha, linkAnexo, salvarEquipe, removerEquipe,
+    salvarFoto, removerFoto, solicitarCodigo, redefinirComCodigo, coordRedefinirSenha, precisaTrocarSenha,
     ouvir: (fn) => { S.ouvintes.add(fn); return () => S.ouvintes.delete(fn); },
     AppError, uuid,
   };

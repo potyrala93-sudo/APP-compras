@@ -86,6 +86,7 @@
     anexos: {},         // pedido_id -> []
     perfis: {},         // id -> perfil
     notifs: [],
+    ocultos: [],        // pedidos que o usuário apagou da própria tela
     whatsapp: null,
     pendentes: [],      // fila offline (em memória)
     sincronizando: false,
@@ -141,7 +142,7 @@
     if (anterior && anterior.id !== p.id) {
       // outro usuário neste aparelho: limpa dados e fila do anterior
       await kv.clear(); await outbox.clear(); S.pendentes = [];
-      S.pedidos = []; S.eventos = {}; S.anexos = {}; S.notifs = [];
+      S.pedidos = []; S.eventos = {}; S.anexos = {}; S.notifs = []; S.ocultos = [];
     }
     S.perfil = p;
     await kv.set('perfil', p);
@@ -151,7 +152,7 @@
     try { await S.sb.auth.signOut(); } catch (_) {}
     pararTempoReal();
     await kv.clear();
-    S.perfil = null; S.pedidos = []; S.eventos = {}; S.anexos = {}; S.notifs = []; S.whatsapp = null;
+    S.perfil = null; S.pedidos = []; S.eventos = {}; S.anexos = {}; S.notifs = []; S.ocultos = []; S.whatsapp = null;
   }
   async function restaurar() {
     const p = await kv.get('perfil');
@@ -183,6 +184,7 @@
     S.anexos = c.anexos || {};
     S.perfis = c.perfis || {};
     S.notifs = c.notifs || [];
+    S.ocultos = c.ocultos || [];
     S.whatsapp = c.whatsapp || null;
     S.ultimaSync = c.ultimaSync || null;
     S.pendentes = await outbox.all();
@@ -190,7 +192,7 @@
   async function salvarCache() {
     await kv.set('dados', {
       equipes: S.equipes, pedidos: S.pedidos, eventos: S.eventos, anexos: S.anexos,
-      perfis: S.perfis, notifs: S.notifs, whatsapp: S.whatsapp, ultimaSync: S.ultimaSync,
+      perfis: S.perfis, notifs: S.notifs, ocultos: S.ocultos, whatsapp: S.whatsapp, ultimaSync: S.ultimaSync,
     });
   }
 
@@ -215,12 +217,13 @@
     if (atualizando) return atualizando;
     atualizando = (async () => {
       const sb = cliente();
-      const [eq, ped, nt, pf, wp] = await Promise.all([
+      const [eq, ped, nt, pf, wp, oc] = await Promise.all([
         sb.from('equipes').select('*').order('nome'),
         sb.from('pedidos').select('*').order('criado_em', { ascending: false }).limit(1000),
         sb.from('notificacoes').select('*').eq('para_id', S.perfil.id).order('criado_em', { ascending: false }).limit(100),
         sb.from('perfis').select('id,usuario,nome,cdc,cargo,whatsapp,ativo,foto_url'),
         sb.from('whatsapp_config').select('*').maybeSingle(),
+        sb.from('pedidos_ocultos').select('pedido_id'),
       ]);
       for (const r of [eq, ped, nt, pf]) if (r.error) throw new AppError(r.error);
       const ids = ped.data.map((x) => x.id);
@@ -229,7 +232,8 @@
       S.pedidos = ped.data;
       S.eventos = agrupar(ev, 'pedido_id');
       S.anexos = agrupar(ax, 'pedido_id');
-      S.notifs = nt.data;
+      S.notifs = semApagadas(nt.data);
+      if (!oc.error) S.ocultos = comPendentesOcultos(oc.data.map((x) => x.pedido_id));
       S.perfis = Object.fromEntries(pf.data.map((p) => [p.id, p]));
       S.whatsapp = wp.error ? S.whatsapp : wp.data;
       S.ultimaSync = new Date().toISOString();
@@ -243,6 +247,19 @@
       return false;
     }).finally(() => { atualizando = null; });
     return atualizando;
+  }
+
+  // notificações apagadas que ainda não chegaram ao servidor não voltam para a lista
+  function semApagadas(lista) {
+    const fora = new Set();
+    for (const op of S.pendentes) if (op.tipo === 'apagar_notif') op.ids.forEach((i) => fora.add(i));
+    return lista.filter((n) => !fora.has(n.id));
+  }
+  // aplica por cima da lista do servidor o que ainda está na fila (apagar / trazer de volta)
+  function comPendentesOcultos(lista) {
+    const set = new Set(lista);
+    for (const op of S.pendentes) if (op.tipo === 'rpc' && op.fn === 'ocultar_pedido') { if (op.args.p_ocultar === false) set.delete(op.args.p_id); else set.add(op.args.p_id); }
+    return [...set];
   }
 
   // ---------- Tempo real ----------
@@ -302,6 +319,17 @@
       if (ins.error && ins.error.code !== '23505') throw new AppError(ins.error);
       return true;
     }
+    if (op.tipo === 'excluir_pedido') {
+      // tira as fotos/orçamentos do armazenamento (se não der, o pedido é apagado mesmo assim)
+      if (op.caminhos && op.caminhos.length) { try { await sb.storage.from('anexos').remove(op.caminhos); } catch (_) {} }
+      await rpc('excluir_pedido', { p_id: op.pedido_id });
+      return true;
+    }
+    if (op.tipo === 'apagar_notif') {
+      const r = await sb.from('notificacoes').delete().in('id', op.ids);
+      if (r.error) throw new AppError(r.error);
+      return true;
+    }
     throw new Error('Operação desconhecida');
   }
   let rodando = null;
@@ -327,6 +355,10 @@
             if (op.tipo === 'rpc' && op.fn === 'criar_pedido') {
               // descarta os anexos desse pedido que não foi aceito
               for (const o of await outbox.all()) if (o.tipo === 'upload' && o.pedido_id === op.args.p.id) await outbox.del(o.seq);
+            }
+            if (op.tipo === 'rpc' && op.fn === 'editar_pedido' && op.grupo) {
+              // edição recusada (ex.: o coordenador já decidiu): não envia as fotos novas dessa edição
+              for (const o of await outbox.all()) if (o.tipo === 'upload' && o.grupo === op.grupo) await outbox.del(o.seq);
             }
             falhas.push({ op, msg: err.message });
           }
@@ -355,6 +387,7 @@
     const eventos = {}; for (const k in S.eventos) eventos[k] = S.eventos[k].slice();
     const anexos = {}; for (const k in S.anexos) anexos[k] = S.anexos[k].slice();
     const addEv = (id, ev) => { (eventos[id] = eventos[id] || []).push(ev); };
+    const excluidos = new Set(S.pendentes.filter((op) => op.tipo === 'excluir_pedido').map((op) => op.pedido_id));
     for (const op of S.pendentes) {
       if (op.tipo === 'rpc' && op.fn === 'criar_pedido' && !porId[op.args.p.id]) {
         const d = op.args.p; const eq = S.equipes.find((e) => e.nome === d.equipe && e.cdc === S.perfil.cdc);
@@ -365,6 +398,19 @@
         };
         pedidos.unshift(p); porId[p.id] = p;
         addEv(p.id, eventoLocal('Solicitação salva no aparelho', 'Será enviada automaticamente quando houver internet.', op.criado));
+      } else if (op.tipo === 'rpc' && op.fn === 'editar_pedido') {
+        const d = op.args.p; const p = porId[d.id]; if (!p) continue;
+        const eq = S.equipes.find((e) => e.nome === d.equipe && e.cdc === p.cdc);
+        Object.assign(p, {
+          departamento: d.departamento, equipe: d.equipe, equipe_tipo: d.equipe ? (eq ? eq.tipo : p.equipe_tipo) : null,
+          frota: eq && eq.tipo === 'Mecanizado' ? d.frota : null, tipo_pedido: d.tipo_pedido, itens: d.itens,
+          motivo: d.motivo, data_necessidade: d.data_necessidade, _pendente: true,
+        });
+        const rem = d.remover_anexos || [];
+        if (rem.length && anexos[d.id]) anexos[d.id] = anexos[d.id].filter((a) => !rem.includes(a.id));
+        addEv(d.id, eventoLocal('Alteração salva no aparelho (aguardando envio)', null, op.criado));
+      } else if (op.tipo === 'rpc' && op.fn === 'ocultar_pedido') {
+        continue;
       } else if (op.tipo === 'rpc') {
         const id = op.args.p_id; const p = porId[id]; if (!p) continue;
         p._pendente = true;
@@ -385,7 +431,7 @@
         (anexos[op.pedido_id] = anexos[op.pedido_id] || []).push({ id: op.anexo_id, pedido_id: op.pedido_id, tipo: op.categoria, nome: op.nome, mime: op.mime, _blob: op.blob, _local: true });
       }
     }
-    return { pedidos, eventos, anexos };
+    return { pedidos: excluidos.size ? pedidos.filter((p) => !excluidos.has(p.id)) : pedidos, eventos, anexos };
   }
 
   // ---------- Ações ----------
@@ -401,6 +447,46 @@
     const falhas = await sincronizar();
     const ainda = (await outbox.all()).some((o) => o.tipo === 'rpc' && o.args && o.args.p && o.args.p.id === id);
     return { id, offline: ainda, falhas: Array.isArray(falhas) ? falhas : [] };
+  }
+  async function editarPedido(id, dados, arquivos, removidos) {
+    const grupo = uuid(); const agora = new Date().toISOString();
+    const p = Object.assign({}, dados, { id, remover_anexos: removidos || [] });
+    await outbox.add({ tipo: 'rpc', fn: 'editar_pedido', args: { p }, grupo, rotulo: 'salvar a alteração do pedido', criado: agora, perfil_id: S.perfil.id });
+    for (const a of arquivos) {
+      await outbox.add({ tipo: 'upload', pedido_id: id, anexo_id: uuid(), grupo, categoria: a.categoria, nome: a.nome, mime: a.mime, blob: a.blob, rotulo: 'enviar o anexo ' + a.nome, criado: agora, perfil_id: S.perfil.id });
+    }
+    S.pendentes = await outbox.all();
+    avisar('fila');
+    const falhas = await sincronizar();
+    const ainda = (await outbox.all()).some((o) => o.grupo === grupo && o.tipo === 'rpc');
+    return { offline: ainda, falhas: Array.isArray(falhas) ? falhas : [] };
+  }
+  // apaga o pedido de vez (só o solicitante, antes de o Compras finalizar)
+  async function excluirPedido(p) {
+    if (p._local) {
+      // ainda não saiu do aparelho: basta tirar da fila
+      for (const o of await outbox.all()) {
+        const alvo = o.pedido_id || (o.args && ((o.args.p && o.args.p.id) || o.args.p_id));
+        if (alvo === p.id) await outbox.del(o.seq);
+      }
+      S.pendentes = await outbox.all(); avisar('fila'); avisar('dados');
+      return [];
+    }
+    const caminhos = (S.anexos[p.id] || []).map((a) => a.caminho).filter(Boolean);
+    return enfileirar({ tipo: 'excluir_pedido', pedido_id: p.id, caminhos, rotulo: 'apagar o pedido' });
+  }
+  // apaga a solicitação só da tela de quem fez (o pedido continua no banco); ocultar=false traz de volta
+  async function ocultarPedido(id, ocultar) {
+    ocultar = ocultar !== false;
+    const set = new Set(S.ocultos); if (ocultar) set.add(id); else set.delete(id);
+    S.ocultos = [...set]; await salvarCache(); avisar('dados');
+    return enfileirar({ tipo: 'rpc', fn: 'ocultar_pedido', args: { p_id: id, p_ocultar: ocultar }, rotulo: ocultar ? 'apagar o pedido da tela' : 'trazer o pedido de volta' });
+  }
+  async function apagarNotificacoes(ids) {
+    if (!ids.length) return;
+    S.notifs = S.notifs.filter((n) => !ids.includes(n.id));
+    await salvarCache(); avisar('dados');
+    return enfileirar({ tipo: 'apagar_notif', ids, rotulo: ids.length > 1 ? 'apagar as notificações' : 'apagar a notificação' });
   }
   const acao = (fn, args, rotulo) => enfileirar({ tipo: 'rpc', fn, args, rotulo });
   const decidirCoordenador = (id, aprovar, just) => acao('decidir_coordenador', { p_id: id, p_aprovar: aprovar, p_justificativa: just || null }, aprovar ? 'aprovar o pedido' : 'negar o pedido');
@@ -474,7 +560,7 @@
 
   window.Store = {
     S, lerConfig, cliente, garantirSessao, entrar, cadastrar, sair, restaurar, validarSessaoOnline,
-    atualizar, sincronizar, iniciarTempoReal, pararTempoReal, visao, criarPedido,
+    atualizar, sincronizar, iniciarTempoReal, pararTempoReal, visao, criarPedido, editarPedido, ocultarPedido, excluirPedido, apagarNotificacoes,
     decidirCoordenador, decidirAnalista, atualizarCompra, confirmarRecebimento,
     marcarLidas, salvarWhatsapp, alterarSenha, linkAnexo, salvarEquipe, removerEquipe,
     salvarFoto, removerFoto, solicitarCodigo, redefinirComCodigo, coordRedefinirSenha, precisaTrocarSenha,

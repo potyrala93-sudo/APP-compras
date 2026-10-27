@@ -32,6 +32,8 @@
     alert: 'M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z',
     tick: 'M5 12l5 5L20 7',
     wa: 'M3 21l1.7-5A8.5 8.5 0 1 1 8 19.3L3 21zM9 9.5c0 3 2.5 5.5 5.5 5.5l1.5-1.5-2-1-1 1c-1-.4-2-1.4-2.4-2.4l1-1-1-2L9 9.5z',
+    trash: 'M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3',
+    edit: 'M4 20h4L19 9l-4-4L4 16v4zM13.5 6.5l4 4',
   };
   const ic = (n, s) => `<svg width="${s || 22}" height="${s || 22}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${P[n]}"/></svg>`;
 
@@ -57,11 +59,20 @@
     pessoa = pessoa || {};
     return `<span class="avatar${cls ? ' ' + cls : ''}">${h(iniciais(pessoa.nome))}${pessoa.foto_url ? `<img src="${h(pessoa.foto_url)}" alt="" onerror="this.remove()">` : ''}</span>`;
   }
+  const nomeItem = (i) => String(i.produto || '').trim() || String(i.descricao || '').trim().slice(0, 40) || 'Produto sem nome';
   function resumoItens(itens) {
-    if (!itens || !itens.length) return 'Sem itens';
-    const r = itens[0].produto; const n = itens.length - 1;
+    if (!itens || !itens.length) return 'Pedido sem produto informado';
+    const r = nomeItem(itens[0]); const n = itens.length - 1;
     return n ? `${r} + ${n} ${n === 1 ? 'item' : 'itens'}` : r;
   }
+  const qtdItem = (i) => (i.quantidade == null || i.quantidade === '' ? '—' : `${qtd(i.quantidade)} ${i.unidade || 'un'}`);
+  const textoItens = (itens) => (itens || []).map((i) => (i.quantidade == null ? '' : qtd(i.quantidade) + ' ' + (i.unidade || '') + ' ') + nomeItem(i)).join('; ');
+  const porNecessidade = (a, b) => String(a.data_necessidade || '9999').localeCompare(String(b.data_necessidade || '9999'));
+  const ocultos = () => new Set(S.ocultos || []);
+  const meusPedidos = (v) => { const o = ocultos(); return v.pedidos.filter((p) => p.solicitante_id === S.perfil.id && !o.has(p.id)); };
+  const finalizado = (p) => p.etapa === 'recebido' || p.status_compra === 'Finalizado';
+  const podeEditar = (p) => p.solicitante_id === S.perfil.id && p.etapa === 'coordenador' && !!p.numero;
+  function blocoMotivo(p) { return p.motivo ? `<div class="reason"><span class="lbl">Por que precisa</span>${h(p.motivo)}</div>` : ''; }
   const nomeDe = (id) => (S.perfis[id] && S.perfis[id].nome) || (S.perfil && id === S.perfil.id ? S.perfil.nome : 'Solicitante');
   function linkWhats(id, texto) {
     const p = S.perfis[id]; let tel = p && p.whatsapp ? String(p.whatsapp).replace(/\D/g, '') : '';
@@ -89,9 +100,11 @@
     opts = opts || {};
     let box = $('.toasts'); if (!box) { box = document.createElement('div'); box.className = 'toasts'; box.setAttribute('role', 'status'); document.body.appendChild(box); }
     const t = document.createElement('div'); t.className = 'toast' + (opts.erro ? ' erro' : '');
-    t.innerHTML = `<span>${h(msg)}</span>` + (opts.link ? `<a class="t-act" href="${h(opts.link)}" target="_blank" rel="noopener">${h(opts.linkTxt || 'Abrir')}</a>` : '');
+    t.innerHTML = `<span>${h(msg)}</span>` + (opts.link ? `<a class="t-act" href="${h(opts.link)}" target="_blank" rel="noopener">${h(opts.linkTxt || 'Abrir')}</a>` : '')
+      + (opts.acao ? `<button type="button" class="t-act">${h(opts.acao.txt)}</button>` : '');
+    if (opts.acao) t.querySelector('button.t-act').onclick = () => { t.remove(); opts.acao.fn(); };
     box.appendChild(t);
-    setTimeout(() => t.remove(), opts.tempo || (opts.link ? 9000 : 4500));
+    setTimeout(() => t.remove(), opts.tempo || (opts.link || opts.acao ? 9000 : 4500));
   }
   function dialogo(html, onOpen) {
     const d = document.createElement('dialog');
@@ -151,7 +164,7 @@
     if (sec === 'aprovacao-coordenador') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'coordenador').length;
     if (sec === 'aprovacao-analista') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'analista').length;
     if (sec === 'compras') return v.pedidos.filter((p) => p.cdc === me.cdc && p.etapa === 'compras').length;
-    if (sec === 'pedidos') return v.pedidos.filter((p) => p.solicitante_id === me.id && p.etapa === 'compras' && ['Aguardando retirada', 'Finalizado'].includes(p.status_compra)).length;
+    if (sec === 'pedidos') return meusPedidos(v).filter((p) => p.etapa === 'compras' && ['Aguardando retirada', 'Finalizado'].includes(p.status_compra)).length;
     return 0;
   }
 
@@ -191,6 +204,7 @@
 
   function telaLogin(msg) {
     app().innerHTML = `<div class="auth"><div class="auth-box">
+      <a class="menu-link" href="../APP-menu/"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>Menu dos apps</a>
       <div class="auth-brand"><span class="tag big">Compras</span></div>
       <form class="auth-card" id="f-login" novalidate>
         <div><h1>Entrar</h1><p class="muted">Use seu usuário e senha.</p></div>
@@ -369,6 +383,7 @@
     const btn = (s, curto) => `<button data-nav="${s}">${curto ? `<span class="ico">${ic(SECOES[s].icone)}<span class="nav-count" data-count="${s}" hidden></span></span>${h(SECOES[s].curto)}` : `${ic(SECOES[s].icone)}<span>${h(SECOES[s].nome)}</span><span class="nav-count" data-count="${s}" hidden></span>`}</button>`;
     app().innerHTML = `
       <header class="topbar">
+        <a class="menu-btn" href="../APP-menu/" aria-label="Voltar ao menu dos apps" title="Menu dos apps"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/></svg><span>Menu</span></a>
         <div class="brand"><span class="tag">Compras</span><span class="cdc">${h(me.cdc)}</span></div>
         <div class="spacer"></div>
         <span class="net" id="net" hidden></span>
@@ -436,33 +451,48 @@
   //   Solicitação
   // =========================================================
   let anexosSol = { fotos: [], orcamentos: [], ficha: [] };
-
-  function vSolicitacao(view, v) {
+  function vSolicitacao(view, v, params) {
     const me = S.perfil;
+    const editId = params && params.get('editar');
+    const ed = editId ? v.pedidos.find((p) => p.id === editId && p.solicitante_id === me.id) : null;
+    if (editId && (!ed || ed.etapa !== 'coordenador' || !ed.numero)) {
+      view.innerHTML = `<div class="page-head"><div><h1>Editar pedido</h1></div></div>
+        ${vazio(ed && ed.etapa !== 'coordenador' ? 'Este pedido não pode mais ser editado' : 'Pedido não encontrado',
+          ed && ed.etapa !== 'coordenador' ? 'Só dá para editar enquanto o coordenador não aprovar nem negar.' : 'Ele pode ter sido apagado da sua tela ou ainda não foi enviado.',
+          '<br><button class="btn" data-go="pedidos">Ver meus pedidos</button>')}`;
+      $$('[data-go]', view).forEach((b) => (b.onclick = () => ir(b.dataset.go)));
+      return;
+    }
     const equipes = S.equipes.filter((e) => e.cdc === me.cdc);
+    if (ed && ed.equipe && !equipes.some((e) => e.nome === ed.equipe)) equipes.push({ nome: ed.equipe, tipo: ed.equipe_tipo || 'Manual' });
     anexosSol = { fotos: [], orcamentos: [], ficha: [] };
+    const existentes = ed ? (v.anexos[ed.id] || []).filter((a) => !a._local) : [];
+    const removidos = new Set();
+    const itensIniciais = ed && ed.itens && ed.itens.length ? ed.itens : [{}];
     view.innerHTML = `
-      <div class="page-head"><div><h1>Solicitação</h1><p>Preencha o pedido de material. Ele segue para o coordenador do seu CDC.</p></div></div>
+      <div class="page-head"><div><h1>${ed ? 'Editar pedido nº ' + h(ed.numero) : 'Solicitação'}</h1>
+        <p>${ed ? 'Você pode alterar o pedido enquanto o coordenador não aprovar nem negar. Ele recebe um aviso da alteração.' : 'Preencha o pedido de material. Nenhum campo é obrigatório. Ele segue para o coordenador do seu CDC.'}</p></div>
+        ${ed ? `<button class="btn btn-ghost" data-go="pedidos">Cancelar edição</button>` : ''}</div>
       <form id="f-sol" class="stack" novalidate>
         <section class="panel stack">
           <dl class="facts">
-            <div><dt>Data</dt><dd>${dataBR(hoje())}</dd></div>
+            <div><dt>Data</dt><dd>${dataBR(ed ? ed.data_pedido : hoje())}</dd></div>
             <div><dt>Solicitante</dt><dd>${h(me.nome)}</dd></div>
             <div><dt>CDC</dt><dd>${h(me.cdc)}</dd></div>
           </dl>
           <div class="grid-2">
             <div class="field"><label for="s-dep">Departamento</label>
-              <select id="s-dep" class="input" required><option value="">Selecione</option>${DEPARTAMENTOS.map((d) => `<option>${h(d)}</option>`).join('')}</select></div>
+              <select id="s-dep" class="input"><option value="">Selecione</option>${DEPARTAMENTOS.map((d) => `<option ${ed && ed.departamento === d ? 'selected' : ''}>${h(d)}</option>`).join('')}</select></div>
             <div class="field"><label for="s-eq">Equipe</label>
-              <select id="s-eq" class="input" required ${equipes.length ? '' : 'disabled'}><option value="">${equipes.length ? 'Selecione' : 'Nenhuma equipe cadastrada'}</option>
-              ${equipes.map((e) => `<option value="${h(e.nome)}" data-tipo="${h(e.tipo)}">${h(e.nome)} (${h(e.tipo)})</option>`).join('')}</select>
+              <select id="s-eq" class="input" ${equipes.length ? '' : 'disabled'}><option value="">${equipes.length ? 'Selecione' : 'Nenhuma equipe cadastrada'}</option>
+              ${equipes.map((e) => `<option value="${h(e.nome)}" data-tipo="${h(e.tipo)}" ${ed && ed.equipe === e.nome ? 'selected' : ''}>${h(e.nome)} (${h(e.tipo)})</option>`).join('')}</select>
               ${equipes.length ? '' : '<span class="hint">Ainda não há equipes para o seu CDC. O coordenador cadastra em Base de dados › Equipes.</span>'}</div>
           </div>
-          <div class="field" id="s-frota-box" hidden><label for="s-frota">Frota</label><input id="s-frota" class="input" placeholder="Prefixo ou número da máquina">
+          <div class="field" id="s-frota-box" ${ed && ed.equipe_tipo === 'Mecanizado' ? '' : 'hidden'}><label for="s-frota">Frota</label><input id="s-frota" class="input" placeholder="Prefixo ou número da máquina" value="${h(ed ? ed.frota || '' : '')}">
             <span class="hint">Equipe mecanizada: informe a frota que vai receber o material.</span></div>
           <div class="field"><span class="label" id="s-tipo-lbl">Tipo de pedido</span>
             <div class="seg" role="radiogroup" aria-labelledby="s-tipo-lbl">
-              ${TIPOS.map((t, i) => `<input type="radio" name="tipo" id="tp${i}" value="${h(t)}"><label for="tp${i}" class="${t === 'Regularização' ? 'warn-opt' : ''}">${h(t)}</label>`).join('')}
+              ${TIPOS.map((t, i) => `<input type="radio" name="tipo" id="tp${i}" value="${h(t)}" ${ed && ed.tipo_pedido === t ? 'checked' : ''}><label for="tp${i}" class="${t === 'Regularização' ? 'warn-opt' : ''}">${h(t)}</label>`).join('')}
             </div></div>
           <div id="s-alerta"></div>
         </section>
@@ -470,19 +500,19 @@
         <section class="panel stack">
           <div class="panel-title"><h2>Produtos</h2></div>
           <div class="seg" style="grid-template-columns:1fr 1fr" role="radiogroup" aria-label="Forma do pedido">
-            <input type="radio" name="modo" id="m1" value="um" checked><label for="m1">Um produto</label>
-            <input type="radio" name="modo" id="m2" value="ficha"><label for="m2">Ficha com vários itens</label>
+            <input type="radio" name="modo" id="m1" value="um" ${itensIniciais.length > 1 ? '' : 'checked'}><label for="m1">Um produto</label>
+            <input type="radio" name="modo" id="m2" value="ficha" ${itensIniciais.length > 1 ? 'checked' : ''}><label for="m2">Ficha com vários itens</label>
           </div>
           <div id="itens" class="stack"></div>
-          <div id="ficha-extra" class="stack" hidden>
+          <div id="ficha-extra" class="stack" ${itensIniciais.length > 1 ? '' : 'hidden'}>
             <button type="button" class="btn btn-ghost" id="add-item">${ic('plus', 18)} Adicionar item</button>
-            <div class="field"><span class="label">Arquivo da ficha (opcional)</span>
+            <div class="field"><span class="label">Arquivo da ficha</span>
               <label class="dropzone"><span class="dz-ico">${ic('file')}</span><span><b>Anexar ficha de solicitação</b><br><span class="small muted">PDF, foto ou planilha</span></span>
                 <input type="file" id="in-ficha" accept="image/*,application/pdf,.xls,.xlsx,.csv,.doc,.docx"></label>
               <div class="files" id="lst-ficha"></div></div>
           </div>
           <div class="field"><label for="s-motivo">Por que precisa deste material?</label>
-            <textarea id="s-motivo" class="input" required placeholder="Ex.: troca preventiva do filtro da frota 102, máquina parada sem a peça"></textarea></div>
+            <textarea id="s-motivo" class="input" placeholder="Ex.: troca preventiva do filtro da frota 102, máquina parada sem a peça">${h(ed ? ed.motivo || '' : '')}</textarea></div>
         </section>
 
         <section class="panel stack">
@@ -503,10 +533,10 @@
 
         <section class="panel stack">
           <div class="field" style="max-width:320px"><label for="s-nec">Data da necessidade</label>
-            <input id="s-nec" type="date" class="input" min="${hoje()}" required>
+            <input id="s-nec" type="date" class="input" min="${hoje()}" value="${h(ed && ed.data_necessidade ? String(ed.data_necessidade).slice(0, 10) : '')}">
             <span class="hint">Quando o material precisa estar disponível.</span></div>
           <p class="form-error" id="s-err" role="alert"></p>
-          <div class="row end"><button class="btn" id="s-btn">Enviar solicitação</button></div>
+          <div class="row end">${ed ? '<button type="button" class="btn btn-ghost" data-go="pedidos">Cancelar</button>' : ''}<button class="btn" id="s-btn">${ed ? 'Salvar alterações' : 'Enviar solicitação'}</button></div>
         </section>
       </form>`;
 
@@ -514,6 +544,7 @@
     const marcar = () => { form.dataset.sujo = '1'; };
     form.addEventListener('input', marcar);
     form.addEventListener('change', marcar);
+    $$('[data-go]', view).forEach((b) => (b.onclick = () => { delete form.dataset.sujo; ir(b.dataset.go); }));
 
     // equipe → frota
     $('#s-eq').addEventListener('change', (e) => {
@@ -522,25 +553,30 @@
       $('#s-frota-box').hidden = !mec; if (!mec) $('#s-frota').value = '';
     });
     // tipo → alerta
+    const alertaReg = () => `<div class="alert alert-warn">${ic('alert', 20)}<span><strong>Compra por regularização não é recomendada.</strong>Use só em último caso, quando o material já foi usado ou comprado fora do fluxo.</span></div>`;
+    if (ed && ed.tipo_pedido === 'Regularização') $('#s-alerta').innerHTML = alertaReg();
     $$('input[name="tipo"]', view).forEach((r) => r.addEventListener('change', () => {
       const reg = r.value === 'Regularização' && r.checked;
-      $('#s-alerta').innerHTML = reg ? `<div class="alert alert-warn">${ic('alert', 20)}<span><strong>Compra por regularização não é recomendada.</strong>Use só em último caso, quando o material já foi usado ou comprado fora do fluxo.</span></div>` : '';
+      $('#s-alerta').innerHTML = reg ? alertaReg() : '';
       if (reg) confirmar('Regularização não é recomendada', 'Esse tipo de compra deve ser usado <b>só em último caso</b>. Se der para planejar, escolha <b>Planejado</b>.', { ok: 'Entendi, manter', cancelar: 'Trocar o tipo' })
         .then((r2) => { if (!r2.ok) { $('#tp0').checked = true; $('#s-alerta').innerHTML = ''; } });
     }));
 
     // itens
     const itens = $('#itens');
-    const linhaItem = (i, removivel) => `<div class="item-row" data-item>
+    const linhaItem = (i, removivel, it) => {
+      it = it || {};
+      return `<div class="item-row" data-item>
         <span class="item-num">Item ${i}</span>
         ${removivel ? `<button type="button" class="icon-btn remove" data-rm-item aria-label="Remover item ${i}">${ic('x', 18)}</button>` : ''}
-        <div class="field"><label>Nome do produto</label><input class="input" data-f="produto" required placeholder="Ex.: Filtro hidráulico"></div>
-        <div class="qty"><div class="field"><label>Quantidade</label><input class="input" data-f="quantidade" type="number" min="0" step="any" inputmode="decimal" required></div>
-          <div class="field"><label>Unidade</label><select class="input" data-f="unidade">${UNIDADES.map((u) => `<option>${u}</option>`).join('')}</select></div></div>
-        <div class="field"><label>Descrição do produto</label><textarea class="input" data-f="descricao" placeholder="Marca, modelo, medida, código da peça…"></textarea></div>
+        <div class="field"><label>Nome do produto</label><input class="input" data-f="produto" placeholder="Ex.: Filtro hidráulico" value="${h(it.produto || '')}"></div>
+        <div class="qty"><div class="field"><label>Quantidade</label><input class="input" data-f="quantidade" type="number" min="0" step="any" inputmode="decimal" value="${it.quantidade == null ? '' : h(it.quantidade)}"></div>
+          <div class="field"><label>Unidade</label><select class="input" data-f="unidade">${UNIDADES.map((u) => `<option ${it.unidade === u ? 'selected' : ''}>${u}</option>`).join('')}</select></div></div>
+        <div class="field"><label>Descrição do produto</label><textarea class="input" data-f="descricao" placeholder="Marca, modelo, medida, código da peça…">${h(it.descricao || '')}</textarea></div>
       </div>`;
+    };
     const renumerar = () => $$('[data-item]', itens).forEach((el, i) => { $('.item-num', el).textContent = 'Item ' + (i + 1); });
-    itens.innerHTML = linhaItem(1, false);
+    itens.innerHTML = itensIniciais.map((it, i) => linhaItem(i + 1, i > 0, it)).join('');
     $$('input[name="modo"]', view).forEach((r) => r.addEventListener('change', () => {
       const ficha = $('#m2').checked;
       $('#ficha-extra').hidden = !ficha;
@@ -551,14 +587,20 @@
     $('#add-item').onclick = () => { itens.insertAdjacentHTML('beforeend', linhaItem($$('[data-item]', itens).length + 1, true)); renumerar(); $$('[data-item]', itens).pop().querySelector('input').focus(); };
     itens.addEventListener('click', (e) => { const b = e.target.closest('[data-rm-item]'); if (b) { b.closest('[data-item]').remove(); renumerar(); } });
 
-    // anexos
+    // anexos (os que já estavam no pedido + os novos)
+    const exist = (tipo) => existentes.filter((a) => a.tipo === tipo && !removidos.has(a.id));
     const mostrarFotos = () => {
-      $('#lst-fotos').innerHTML = anexosSol.fotos.map((f, i) => `<div class="thumb"><img src="${f.url}" alt="Foto ${i + 1}"><button type="button" data-rm="fotos" data-i="${i}" aria-label="Remover foto ${i + 1}">${ic('x', 14)}</button></div>`).join('');
+      $('#lst-fotos').innerHTML = exist('foto').map((a) => `<div class="thumb"><a data-anexo="${h(a.id)}" target="_blank" rel="noopener"><img alt="${h(a.nome)}" data-anexo-img="${h(a.id)}"></a><button type="button" data-rm-ex="${h(a.id)}" aria-label="Remover ${h(a.nome)}">${ic('x', 14)}</button></div>`).join('')
+        + anexosSol.fotos.map((f, i) => `<div class="thumb"><img src="${f.url}" alt="Foto ${i + 1}"><button type="button" data-rm="fotos" data-i="${i}" aria-label="Remover foto ${i + 1}">${ic('x', 14)}</button></div>`).join('');
+      hidratarAnexos($('#lst-fotos'));
     };
     const mostrarLista = (k, el) => {
-      $(el).innerHTML = anexosSol[k].map((f, i) => `<div class="file-chip">${ic('file', 18)}<span class="name">${h(f.nome)}</span><span class="small muted">${Math.max(1, Math.round(f.blob.size / 1024))} KB</span><button type="button" class="icon-btn" data-rm="${k}" data-i="${i}" aria-label="Remover ${h(f.nome)}">${ic('x', 16)}</button></div>`).join('');
-      if (k === 'orcamentos') $('#dz-orc').hidden = anexosSol.orcamentos.length >= 3;
+      const tipo = k === 'orcamentos' ? 'orcamento' : 'ficha';
+      $(el).innerHTML = exist(tipo).map((a) => `<div class="file-chip">${ic('file', 18)}<span class="name">${h(a.nome)}</span><span class="small muted">já anexado</span><button type="button" class="icon-btn" data-rm-ex="${h(a.id)}" aria-label="Remover ${h(a.nome)}">${ic('x', 16)}</button></div>`).join('')
+        + anexosSol[k].map((f, i) => `<div class="file-chip">${ic('file', 18)}<span class="name">${h(f.nome)}</span><span class="small muted">${Math.max(1, Math.round(f.blob.size / 1024))} KB</span><button type="button" class="icon-btn" data-rm="${k}" data-i="${i}" aria-label="Remover ${h(f.nome)}">${ic('x', 16)}</button></div>`).join('');
+      if (k === 'orcamentos') $('#dz-orc').hidden = exist('orcamento').length + anexosSol.orcamentos.length >= 3;
     };
+    mostrarFotos(); mostrarLista('orcamentos', '#lst-orc'); mostrarLista('ficha', '#lst-ficha');
     const addFotos = async (e) => {
       for (const f of e.target.files) { const blob = await comprimir(f); anexosSol.fotos.push({ categoria: 'foto', nome: nomeArquivo(f, blob), mime: blob.type || f.type, blob, url: URL.createObjectURL(blob) }); }
       e.target.value = ''; mostrarFotos(); marcar();
@@ -567,7 +609,7 @@
     $('#in-camera').addEventListener('change', addFotos);
     $('#in-orc').addEventListener('change', async (e) => {
       for (const f of e.target.files) {
-        if (anexosSol.orcamentos.length >= 3) { toast('Máximo de 3 orçamentos.', { erro: true }); break; }
+        if (exist('orcamento').length + anexosSol.orcamentos.length >= 3) { toast('Máximo de 3 orçamentos.', { erro: true }); break; }
         const blob = f.type.startsWith('image/') ? await comprimir(f) : f;
         anexosSol.orcamentos.push({ categoria: 'orcamento', nome: nomeArquivo(f, blob), mime: blob.type || f.type, blob });
       }
@@ -577,9 +619,12 @@
       const f = e.target.files[0]; if (!f) return;
       const blob = f.type.startsWith('image/') ? await comprimir(f) : f;
       anexosSol.ficha = [{ categoria: 'ficha', nome: nomeArquivo(f, blob), mime: blob.type || f.type, blob }];
+      exist('ficha').forEach((a) => removidos.add(a.id)); // a ficha nova substitui a antiga
       e.target.value = ''; mostrarLista('ficha', '#lst-ficha'); marcar();
     });
     form.addEventListener('click', (e) => {
+      const bx = e.target.closest('[data-rm-ex]');
+      if (bx) { e.preventDefault(); removidos.add(bx.dataset.rmEx); marcar(); mostrarFotos(); mostrarLista('orcamentos', '#lst-orc'); mostrarLista('ficha', '#lst-ficha'); return; }
       const b = e.target.closest('[data-rm]'); if (!b) return;
       anexosSol[b.dataset.rm].splice(+b.dataset.i, 1);
       if (b.dataset.rm === 'fotos') mostrarFotos(); else mostrarLista(b.dataset.rm, b.dataset.rm === 'ficha' ? '#lst-ficha' : '#lst-orc');
@@ -589,35 +634,49 @@
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const err = $('#s-err'); err.textContent = '';
-      const tipo = ($('input[name="tipo"]:checked', view) || {}).value;
-      const lista = $$('[data-item]', itens).map((el) => ({
-        produto: $('[data-f="produto"]', el).value.trim(), quantidade: parseFloat(String($('[data-f="quantidade"]', el).value).replace(',', '.')),
-        unidade: $('[data-f="unidade"]', el).value, descricao: $('[data-f="descricao"]', el).value.trim(),
-      }));
-      const dados = {
-        data_pedido: hoje(), departamento: $('#s-dep').value, equipe: $('#s-eq').value, frota: $('#s-frota').value.trim() || null,
-        tipo_pedido: tipo, itens: lista, motivo: $('#s-motivo').value.trim(), data_necessidade: $('#s-nec').value,
-      };
       const falta = (m, el) => { err.textContent = m; if (el) el.focus(); };
-      if (!dados.departamento) return falta('Escolha o departamento.', $('#s-dep'));
-      if (!dados.equipe) return falta('Escolha a equipe.', $('#s-eq'));
-      if (!tipo) return falta('Escolha o tipo de pedido.', $('#tp0'));
-      const ruim = lista.findIndex((i) => !i.produto || !(i.quantidade > 0));
-      if (ruim >= 0) return falta(`Item ${ruim + 1}: informe o nome do produto e uma quantidade maior que zero.`, $$('[data-item]', itens)[ruim].querySelector(lista[ruim].produto ? '[data-f="quantidade"]' : '[data-f="produto"]'));
-      if (!dados.motivo) return falta('Diga por que precisa do material.', $('#s-motivo'));
-      if (!dados.data_necessidade) return falta('Informe a data da necessidade.', $('#s-nec'));
-      if (dados.data_necessidade < hoje()) return falta('A data da necessidade não pode ser no passado.', $('#s-nec'));
+      const tipo = ($('input[name="tipo"]:checked', view) || {}).value || null;
+      const linhas = $$('[data-item]', itens);
+      const lista = [];
+      for (let k = 0; k < linhas.length; k++) {
+        const el = linhas[k];
+        const qtxt = String($('[data-f="quantidade"]', el).value).trim().replace(',', '.');
+        const it = { produto: $('[data-f="produto"]', el).value.trim(), quantidade: qtxt === '' ? null : parseFloat(qtxt), unidade: $('[data-f="unidade"]', el).value, descricao: $('[data-f="descricao"]', el).value.trim() };
+        if (!it.produto && !it.descricao && it.quantidade == null) continue; // linha vazia
+        if (it.quantidade != null && !(it.quantidade > 0)) return falta(`Item ${k + 1}: a quantidade, quando informada, precisa ser maior que zero.`, $('[data-f="quantidade"]', el));
+        lista.push(it);
+      }
+      const dados = {
+        data_pedido: ed ? ed.data_pedido : hoje(), departamento: $('#s-dep').value || null, equipe: $('#s-eq').value || null, frota: $('#s-frota').value.trim() || null,
+        tipo_pedido: tipo, itens: lista, motivo: $('#s-motivo').value.trim() || null, data_necessidade: $('#s-nec').value || null,
+      };
+      const dataMudou = !ed || String(ed.data_necessidade || '').slice(0, 10) !== (dados.data_necessidade || '');
+      if (dados.data_necessidade && dataMudou && dados.data_necessidade < hoje()) return falta('A data da necessidade não pode ser no passado.', $('#s-nec'));
+      const arquivos = [...anexosSol.fotos, ...anexosSol.orcamentos, ...anexosSol.ficha];
+      const vazia = !lista.length && !dados.departamento && !dados.equipe && !dados.tipo_pedido && !dados.motivo && !dados.data_necessidade && !arquivos.length && !exist('foto').length && !exist('orcamento').length && !exist('ficha').length;
+      if (vazia) {
+        const r = await confirmar(ed ? 'Salvar o pedido vazio?' : 'Enviar solicitação vazia?', 'Nenhum campo foi preenchido. O coordenador vai receber um pedido sem informações.', { ok: ed ? 'Salvar assim mesmo' : 'Enviar assim mesmo', cancelar: 'Voltar e preencher' });
+        if (!r.ok) return;
+      }
 
-      const btn = $('#s-btn'); btn.disabled = true; btn.textContent = 'Enviando…';
+      const btn = $('#s-btn'); const rotulo = btn.textContent; btn.disabled = true; btn.textContent = ed ? 'Salvando…' : 'Enviando…';
       try {
-        const arquivos = [...anexosSol.fotos, ...anexosSol.orcamentos, ...anexosSol.ficha];
+        if (ed) {
+          const r = await Store.editarPedido(ed.id, dados, arquivos, [...removidos]);
+          const falha = r.falhas.find((f) => f.op.fn === 'editar_pedido');
+          if (falha) { btn.disabled = false; btn.textContent = rotulo; return falta(falha.msg); }
+          delete form.dataset.sujo;
+          toast(r.offline ? 'Alteração salva no aparelho. Ela será enviada quando houver internet.' : `Pedido nº ${ed.numero} atualizado. O coordenador foi avisado.`, { tempo: 6000 });
+          ir('status', { id: ed.id });
+          return;
+        }
         const r = await Store.criarPedido(dados, arquivos);
         const falhaPedido = r.falhas.find((f) => f.op.fn === 'criar_pedido');
-        if (falhaPedido) { btn.disabled = false; btn.textContent = 'Enviar solicitação'; return falta(falhaPedido.msg); }
+        if (falhaPedido) { btn.disabled = false; btn.textContent = rotulo; return falta(falhaPedido.msg); }
         delete form.dataset.sujo;
         toast(r.offline ? 'Solicitação salva no aparelho. Ela será enviada quando houver internet.' : 'Solicitação enviada para o coordenador.', { tempo: 6000 });
         ir('status', { id: r.id });
-      } catch (ex) { btn.disabled = false; btn.textContent = 'Enviar solicitação'; falta(ex.message); }
+      } catch (ex) { btn.disabled = false; btn.textContent = rotulo; falta(ex.message); }
     });
   }
   function nomeArquivo(f, blob) {
@@ -662,8 +721,9 @@
   //   Blocos reutilizados dos cartões
   // =========================================================
   function tabelaItens(itens) {
+    if (!itens || !itens.length) return '<p class="small muted">Nenhum produto informado.</p>';
     return `<table class="items-table"><thead><tr><th>Produto</th><th style="text-align:right">Qtd.</th></tr></thead><tbody>
-      ${(itens || []).map((i) => `<tr><td><b>${h(i.produto)}</b>${i.descricao ? `<div class="desc">${h(i.descricao)}</div>` : ''}</td><td class="q">${qtd(i.quantidade)} ${h(i.unidade || 'un')}</td></tr>`).join('')}
+      ${itens.map((i) => `<tr><td><b>${h(nomeItem(i))}</b>${i.descricao && i.produto ? `<div class="desc">${h(i.descricao)}</div>` : ''}</td><td class="q">${h(qtdItem(i))}</td></tr>`).join('')}
     </tbody></table>`;
   }
   function blocoAnexos(lista) {
@@ -695,19 +755,19 @@
     const fim = ['recebido', 'negado'].includes(p.etapa);
     return `<dl class="keyfacts">
       <div><dt>Pedido em</dt><dd>${dataBR(p.data_pedido)}</dd></div>
-      <div class="need"><dt>Necessidade</dt><dd>${dataBR(p.data_necessidade)}${fim ? '' : prazo(p.data_necessidade)}</dd></div>
-      <div><dt>${opts.semSolicitante ? 'Departamento' : 'Solicitante'}</dt><dd>${opts.semSolicitante ? h(p.departamento) : h(nomeDe(p.solicitante_id))}</dd></div>
-      <div><dt>Equipe</dt><dd>${h(p.equipe)}${p.frota ? ` · Frota ${h(p.frota)}` : ''}${opts.cdc ? `<span class="due fine">${h(p.cdc)}</span>` : ''}</dd></div>
+      <div class="need"><dt>Necessidade</dt><dd>${p.data_necessidade ? dataBR(p.data_necessidade) + (fim ? '' : prazo(p.data_necessidade)) : '<span class="muted">Não informada</span>'}</dd></div>
+      <div><dt>${opts.semSolicitante ? 'Departamento' : 'Solicitante'}</dt><dd>${opts.semSolicitante ? h(p.departamento || '—') : h(nomeDe(p.solicitante_id))}</dd></div>
+      <div><dt>Equipe</dt><dd>${h(p.equipe || '—')}${p.frota ? ` · Frota ${h(p.frota)}` : ''}${opts.cdc ? `<span class="due fine">${h(p.cdc)}</span>` : ''}</dd></div>
     </dl>`;
   }
   function cabecalho(p) {
-    return `<div class="order-head">${numeroTag(p)}${estado(p)}<span class="kind ${h(p.tipo_pedido)}">${h(p.tipo_pedido)}</span><span class="when">${p._pendente ? 'Aguardando envio · ' : ''}${dataBR(p.data_pedido)}</span></div>`;
+    return `<div class="order-head">${numeroTag(p)}${estado(p)}${p.tipo_pedido ? `<span class="kind ${h(p.tipo_pedido)}">${h(p.tipo_pedido)}</span>` : ''}<span class="when">${p._pendente ? 'Aguardando envio · ' : ''}${dataBR(p.data_pedido)}</span></div>`;
   }
   // ---------- Busca por produto ----------
   const buscas = {};
   const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
   function textoBusca(p) {
-    return semAcento([p.numero, p.equipe, p.frota, p.tipo_pedido, p.motivo, ...(p.itens || []).map((i) => i.produto + ' ' + (i.descricao || ''))].join(' '));
+    return semAcento([p.numero, p.equipe, p.frota, p.tipo_pedido, p.motivo, ...(p.itens || []).map((i) => (i.produto || '') + ' ' + (i.descricao || ''))].join(' '));
   }
   function campoBusca(sec, placeholder) {
     return `<div class="search"><span class="s-ico">${ic('search', 20)}</span>
@@ -738,7 +798,7 @@
   //   Pedidos (do próprio usuário)
   // =========================================================
   function vPedidos(view, v, params) {
-    const meus = v.pedidos.filter((p) => p.solicitante_id === S.perfil.id);
+    const meus = meusPedidos(v);
     const grupos = {
       andamento: meus.filter((p) => ['coordenador', 'analista', 'compras'].includes(p.etapa)),
       finalizados: meus.filter((p) => p.etapa === 'recebido'),
@@ -759,6 +819,7 @@
     ligarBusca(view, 'pedidos', 'article.order');
     $$('[data-go]', view).forEach((b) => (b.onclick = () => ir(b.dataset.go)));
     $$('[data-status]', view).forEach((b) => (b.onclick = () => ir('status', { id: b.dataset.status })));
+    ligarEditarApagar(view, v);
     $$('[data-receber]', view).forEach((b) => (b.onclick = async () => {
       const p = v.pedidos.find((x) => x.id === b.dataset.receber);
       const r = await confirmar('Confirmar recebimento', `Você confirma que recebeu o material do pedido <b>nº ${h(p.numero)}</b>? O pedido vai para <b>Finalizados</b>.`, { ok: 'Confirmar recebimento', campo: 'Observação (opcional)', placeholder: 'Ex.: recebido completo no almoxarifado' });
@@ -778,22 +839,50 @@
       ${p.etapa === 'recebido' ? `<p class="small muted">Recebido em ${dataHora(p.recebido_em)}</p>` : ''}
       <details class="more" data-k="m-${h(p.id)}"><summary>Ver detalhes</summary><div class="more-body">
         ${tabelaItens(p.itens)}
-        <div class="reason"><span class="lbl">Por que precisa</span>${h(p.motivo)}</div>
+        ${blocoMotivo(p)}
         ${blocoAnexos(v.anexos[p.id])}
       </div></details>
       <div class="order-actions">
         <button class="btn btn-ghost btn-sm" data-status="${h(p.id)}">${ic('route', 18)} Ver andamento</button>
+        ${podeEditar(p) ? `<button class="btn btn-ghost btn-sm" data-editar="${h(p.id)}">${ic('edit', 18)} Editar</button>` : ''}
+        <button class="btn btn-ghost btn-sm btn-apagar" data-apagar="${h(p.id)}">${ic('trash', 18)} Apagar</button>
         <span class="grow"></span>
         ${p.etapa === 'compras' ? `<button class="btn ${pronto ? '' : 'btn-ghost'}" data-receber="${h(p.id)}">${ic('tick', 18)} Confirmar recebimento</button>` : ''}
       </div>
     </article>`;
   }
 
+  // Editar (enquanto o coordenador não decide) e Apagar:
+  //  - antes de o Compras finalizar: o pedido sai de vez, inclusive do banco de dados
+  //  - depois de finalizado: sai só da tela de quem fez (continua no banco)
+  function ligarEditarApagar(view, v) {
+    $$('[data-editar]', view).forEach((b) => (b.onclick = () => ir('solicitacao', { editar: b.dataset.editar })));
+    $$('[data-apagar]', view).forEach((b) => (b.onclick = async () => {
+      const p = v.pedidos.find((x) => x.id === b.dataset.apagar); if (!p) return;
+      const nome = p.numero ? 'pedido nº ' + p.numero : 'pedido';
+      if (finalizado(p)) return ocultarComDesfazer(p, `O <b>${h(nome)}</b> (${h(resumoItens(p.itens))}) já foi finalizado. Ele some das suas listas de Pedidos e Status, mas <b>continua no banco de dados</b>.`);
+      const resp = { coordenador: 'O coordenador', analista: 'O analista de custo', compras: 'O comprador' }[p.etapa];
+      const r = await confirmar(`Apagar o ${nome}?`, `O pedido (${h(resumoItens(p.itens))}) será <b>apagado de vez, inclusive do banco de dados</b>, junto com fotos e orçamentos.${resp && p.numero ? ` ${resp} recebe um aviso de que ele não precisa mais ser atendido.` : ''} Não dá para desfazer.`, { ok: 'Apagar de vez', perigo: true });
+      if (!r.ok) return;
+      const falhas = await Store.excluirPedido(p);
+      if (!(Array.isArray(falhas) && falhas.length)) toast(navigator.onLine || p._local ? `O ${nome} foi apagado.` : `O ${nome} será apagado quando houver internet.`);
+      render(true);
+    }));
+  }
+  async function ocultarComDesfazer(p, texto) {
+    const nome = p.numero ? 'pedido nº ' + p.numero : 'pedido';
+    const r = await confirmar('Apagar da sua tela?', texto, { ok: 'Apagar da tela', perigo: true });
+    if (!r.ok) return;
+    await Store.ocultarPedido(p.id, true);
+    toast(`O ${nome} foi apagado da sua tela.`, { acao: { txt: 'Desfazer', fn: async () => { await Store.ocultarPedido(p.id, false); toast(`O ${nome} voltou para a sua tela.`); render(true); } } });
+    render(true);
+  }
+
   // =========================================================
   //   Status (percurso + linha do tempo)
   // =========================================================
   function vStatus(view, v, params) {
-    const meus = v.pedidos.filter((p) => p.solicitante_id === S.perfil.id);
+    const meus = meusPedidos(v);
     if (!meus.length) {
       view.innerHTML = `<div class="page-head"><div><h1>Status</h1><p>Acompanhe por onde seu pedido está passando.</p></div></div>
         ${vazio('Você ainda não tem pedidos', 'Faça uma solicitação para acompanhar cada etapa aqui.', '<br><button class="btn" data-go="solicitacao">Fazer uma solicitação</button>')}`;
@@ -813,9 +902,12 @@
             <span class="desc">${h(resumoItens(p.itens))}</span>${estado(p)}</button>`).join('')}
         </div></div>
         <section class="panel">
-          <div class="order-head" style="margin-bottom:12px">${numeroTag(sel, true)}<span class="kind ${h(sel.tipo_pedido)}">${h(sel.tipo_pedido)}</span></div>
+          <div class="order-head" style="margin-bottom:12px">${numeroTag(sel, true)}${sel.tipo_pedido ? `<span class="kind ${h(sel.tipo_pedido)}">${h(sel.tipo_pedido)}</span>` : ''}
+            <span class="grow"></span>
+            ${podeEditar(sel) ? `<button class="btn btn-ghost btn-sm" data-editar="${h(sel.id)}">${ic('edit', 18)} Editar</button>` : ''}
+            <button class="btn btn-ghost btn-sm btn-apagar" data-apagar="${h(sel.id)}">${ic('trash', 18)} Apagar</button></div>
           <h2 style="margin-bottom:4px">${h(resumoItens(sel.itens))}</h2>
-          <p class="muted small" style="margin-bottom:16px">Equipe ${h(sel.equipe)}${sel.frota ? ' · Frota ' + h(sel.frota) : ''} · Necessidade ${dataBR(sel.data_necessidade)}</p>
+          <p class="muted small" style="margin-bottom:16px">${[sel.equipe ? 'Equipe ' + h(sel.equipe) : '', sel.frota ? 'Frota ' + h(sel.frota) : '', 'Necessidade ' + (sel.data_necessidade ? dataBR(sel.data_necessidade) : 'não informada')].filter(Boolean).join(' · ')}</p>
           ${percurso(sel, evs)}
           ${blocoNegado(sel)}
           <h3 style="margin:18px 0 12px">Movimentações</h3>
@@ -824,6 +916,7 @@
         </section>
       </div>`;
     $$('[data-pick]', view).forEach((b) => (b.onclick = () => ir('status', { id: b.dataset.pick })));
+    ligarEditarApagar(view, v);
     ligarBusca(view, 'status', '.pick');
     const g = $('[data-go-ped]', view); if (g) g.onclick = () => ir('pedidos');
   }
@@ -861,14 +954,15 @@
     const doCdc = v.pedidos.filter((p) => p.cdc === S.perfil.cdc);
     const aguardando = doCdc.filter((p) => p.etapa === etapa);
     const tiposDecisao = coord ? ['aprovado_coord', 'negado_coord'] : ['aprovado_analista', 'negado_analista'];
-    const analisados = doCdc.filter((p) => p.etapa !== etapa && (v.eventos[p.id] || []).some((e) => tiposDecisao.includes(e.tipo)));
+    const escondidos = ocultos();
+    const analisados = doCdc.filter((p) => p.etapa !== etapa && !(coord && escondidos.has(p.id)) && (v.eventos[p.id] || []).some((e) => tiposDecisao.includes(e.tipo)));
     const f = params.get('f') === 'feitos' ? 'feitos' : 'aguardando';
     const lista = f === 'feitos' ? analisados : aguardando;
     // separado por usuário
     const porUsuario = {};
     for (const p of lista) (porUsuario[p.solicitante_id] = porUsuario[p.solicitante_id] || []).push(p);
     const ordemGrupos = Object.keys(porUsuario).sort((a, b) => nomeDe(a).localeCompare(nomeDe(b), 'pt-BR'));
-    for (const k of ordemGrupos) porUsuario[k].sort((a, b) => String(a.data_necessidade).localeCompare(String(b.data_necessidade)));
+    for (const k of ordemGrupos) porUsuario[k].sort(porNecessidade);
 
     view.innerHTML = `
       <div class="page-head"><div><h1>${coord ? 'Aprovação Coordenador' : 'Aprovação Analista de Custo'}</h1>
@@ -876,10 +970,14 @@
       ${chips('f', [{ v: 'aguardando', t: 'Aguardando decisão', n: aguardando.length }, { v: 'feitos', t: 'Já analisados', n: analisados.length }], f)}
       ${lista.length ? ordemGrupos.map((uid) => `<section class="group">
           <div class="group-head">${avatar(S.perfis[uid] || { nome: nomeDe(uid) })}<h2>${h(nomeDe(uid))}</h2><span class="count">${porUsuario[uid].length} pedido${porUsuario[uid].length > 1 ? 's' : ''}</span></div>
-          ${porUsuario[uid].map((p) => cartaoAprovacao(p, v, f === 'aguardando')).join('')}
+          ${porUsuario[uid].map((p) => cartaoAprovacao(p, v, f === 'aguardando', coord && f === 'feitos')).join('')}
         </section>`).join('')
         : vazio(f === 'aguardando' ? 'Nada para aprovar agora' : 'Nenhum pedido analisado ainda', f === 'aguardando' ? 'Quando chegar uma solicitação nova, ela aparece aqui e você recebe um aviso.' : 'Os pedidos que você aprovar ou negar ficam listados aqui.')}`;
     ligarChips(view, params, sec);
+    $$('[data-ocultar]', view).forEach((b) => (b.onclick = () => {
+      const p = v.pedidos.find((x) => x.id === b.dataset.ocultar); if (!p) return;
+      ocultarComDesfazer(p, `O <b>pedido nº ${h(p.numero)}</b> (${h(resumoItens(p.itens))}) some da sua lista de Já analisados. Ele <b>continua no banco de dados</b> e segue o fluxo normal.`);
+    }));
     $$('[data-decidir]', view).forEach((b) => (b.onclick = async () => {
       const p = v.pedidos.find((x) => x.id === b.dataset.id);
       const aprovar = b.dataset.decidir === 'sim';
@@ -893,17 +991,17 @@
       await executarAcao(() => fn(p.id, aprovar, r.texto), aprovar ? `Pedido nº ${p.numero} aprovado.` : `Pedido nº ${p.numero} negado.`, link);
     }));
   }
-  function cartaoAprovacao(p, v, comAcoes) {
+  function cartaoAprovacao(p, v, comAcoes, podeOcultar) {
     const wa = linkWhats(p.solicitante_id, `Olá! Sobre o seu pedido de ${resumoItens(p.itens)}:`);
     return `<article class="order">
       ${cabecalho(p)}
       ${fatosPrincipais(p)}
       ${tabelaItens(p.itens)}
-      <div class="reason"><span class="lbl">Por que precisa</span>${h(p.motivo)}</div>
+      ${blocoMotivo(p)}
       ${p.tipo_pedido === 'Regularização' ? `<div class="alert alert-warn">${ic('alert', 18)}<span>Compra por regularização: use só em último caso.</span></div>` : ''}
       ${blocoNegado(p)}
       <details class="more" data-k="a-${h(p.id)}"><summary>Mais detalhes e anexos</summary><div class="more-body">
-        <p class="small"><b>Departamento:</b> ${h(p.departamento)} · <b>Equipe:</b> ${h(p.equipe)} (${h(p.equipe_tipo || '')})</p>
+        <p class="small"><b>Departamento:</b> ${h(p.departamento || '—')} · <b>Equipe:</b> ${p.equipe ? `${h(p.equipe)} (${h(p.equipe_tipo || '')})` : '—'}</p>
         ${blocoAnexos(v.anexos[p.id])}
         ${linhaDoTempo((v.eventos[p.id] || []))}
       </div></details>
@@ -913,6 +1011,7 @@
         <button class="btn btn-danger" data-decidir="nao" data-id="${h(p.id)}">Negar</button>
         <button class="btn" data-decidir="sim" data-id="${h(p.id)}">${ic('tick', 18)} Aprovar</button>
       </div>` : ''}
+      ${podeOcultar ? `<div class="order-actions"><span class="grow"></span><button class="btn btn-ghost btn-sm btn-apagar" data-ocultar="${h(p.id)}">${ic('trash', 18)} Apagar da tela</button></div>` : ''}
     </article>`;
   }
 
@@ -928,7 +1027,7 @@
     if (f === 'recebidos') lista = recebidos;
     else if (STATUS_COMPRA.includes(f)) lista = ativos.filter((p) => (p.status_compra || 'Pendente') === f);
     else lista = ativos;
-    lista = lista.slice().sort((a, b) => String(a.data_necessidade).localeCompare(String(b.data_necessidade)));
+    lista = lista.slice().sort(porNecessidade);
     view.innerHTML = `
       <div class="page-head"><div><h1>Departamento de Compras</h1><p>Pedidos do CDC ${h(S.perfil.cdc)} aprovados pelo coordenador e pelo analista. Cada um fica aqui até o solicitante confirmar que recebeu.</p></div></div>
       ${chips('f', [{ v: 'ativos', t: 'Todos em compra', n: ativos.length }, ...STATUS_COMPRA.map((s) => ({ v: s, t: s, n: ativos.filter((p) => (p.status_compra || 'Pendente') === s).length })), { v: 'recebidos', t: 'Recebidos', n: recebidos.length }], f)}
@@ -957,9 +1056,9 @@
     return `<article class="order">
       ${cabecalho(p)}
       ${fatosPrincipais(p)}
-      <p class="small muted">Solicitante: <b>${h(nomeDe(p.solicitante_id))}</b>${sol ? ' (' + h(sol.cargo) + ')' : ''} · ${h(p.departamento)}${p.equipe_tipo ? (p.equipe_tipo === 'Mecanizado' ? ' · Equipe mecanizada' : ' · Equipe manual') : ''}</p>
+      <p class="small muted">Solicitante: <b>${h(nomeDe(p.solicitante_id))}</b>${sol ? ' (' + h(sol.cargo) + ')' : ''}${p.departamento ? ' · ' + h(p.departamento) : ''}${p.equipe_tipo ? (p.equipe_tipo === 'Mecanizado' ? ' · Equipe mecanizada' : ' · Equipe manual') : ''}</p>
       ${tabelaItens(p.itens)}
-      <div class="reason"><span class="lbl">Por que precisa</span>${h(p.motivo)}</div>
+      ${blocoMotivo(p)}
       ${blocoAnexos(v.anexos[p.id])}
       <details class="more" data-k="c-${h(p.id)}"><summary>Histórico do pedido</summary><div class="more-body">${linhaDoTempo(v.eventos[p.id] || [])}</div></details>
       ${ativo ? `<form class="buy-form" data-compra="${h(p.id)}">
@@ -987,7 +1086,7 @@
       corpo = `<div class="panel-title"><p class="muted small">${pedidos.length} pedidos que você pode ver. Exporte para abrir no Excel.</p>
           <div class="row"><button class="btn btn-ghost btn-sm" id="exp-csv">Exportar planilha (CSV)</button><button class="btn btn-ghost btn-sm" id="exp-json">Cópia completa (JSON)</button></div></div>
         <div class="table-wrap"><table class="data"><thead><tr><th>Nº</th><th>Pedido em</th><th>Necessidade</th><th>CDC</th><th>Solicitante</th><th>Equipe</th><th>Frota</th><th>Tipo</th><th>Itens</th><th>Situação</th></tr></thead><tbody>
-        ${pedidos.map((p) => `<tr><td>${h(p.numero)}</td><td>${dataBR(p.data_pedido)}</td><td>${dataBR(p.data_necessidade)}</td><td>${h(p.cdc)}</td><td>${h(nomeDe(p.solicitante_id))}</td><td>${h(p.equipe)}</td><td>${h(p.frota || '')}</td><td>${h(p.tipo_pedido)}</td><td class="wrap">${h((p.itens || []).map((i) => qtd(i.quantidade) + ' ' + (i.unidade || '') + ' ' + i.produto).join('; '))}</td><td>${h(etapaInfo(p).txt)}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">Sem pedidos.</td></tr>'}
+        ${pedidos.map((p) => `<tr><td>${h(p.numero)}</td><td>${dataBR(p.data_pedido)}</td><td>${dataBR(p.data_necessidade)}</td><td>${h(p.cdc)}</td><td>${h(nomeDe(p.solicitante_id))}</td><td>${h(p.equipe || '')}</td><td>${h(p.frota || '')}</td><td>${h(p.tipo_pedido || '')}</td><td class="wrap">${h(textoItens(p.itens))}</td><td>${h(etapaInfo(p).txt)}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">Sem pedidos.</td></tr>'}
         </tbody></table></div>`;
     } else if (aba === 'equipes') {
       const pode = me.cargo === 'Coordenador';
@@ -1050,9 +1149,9 @@
     const linhas = [col.join(';')];
     for (const p of pedidos) {
       const ult = (v.eventos[p.id] || []).slice(-1)[0];
-      for (const i of p.itens || []) {
-        linhas.push([p.numero, dataBR(p.data_pedido), dataBR(p.data_necessidade), p.cdc, nomeDe(p.solicitante_id), p.departamento, p.equipe, p.equipe_tipo, p.frota, p.tipo_pedido,
-          i.produto, String(i.quantidade).replace('.', ','), i.unidade, i.descricao, p.motivo, etapaInfo(p).txt, p.status_compra, p.justificativa_negativa,
+      for (const i of (p.itens && p.itens.length ? p.itens : [{}])) {
+        linhas.push([p.numero, dataBR(p.data_pedido), p.data_necessidade ? dataBR(p.data_necessidade) : '', p.cdc, nomeDe(p.solicitante_id), p.departamento, p.equipe, p.equipe_tipo, p.frota, p.tipo_pedido,
+          i.produto, i.quantidade == null ? '' : String(i.quantidade).replace('.', ','), i.quantidade == null ? '' : i.unidade, i.descricao, p.motivo, etapaInfo(p).txt, p.status_compra, p.justificativa_negativa,
           p.recebido_em ? dataHora(p.recebido_em) : '', ult ? ult.titulo + ' (' + dataHora(ult.criado_em) + ')' : ''].map(esc).join(';'));
       }
     }
@@ -1085,23 +1184,38 @@
     return ['status', n.pedido_id ? { id: n.pedido_id } : undefined];
   }
   function abrirNotificacoes() {
-    const lista = S.notifs;
-    const d = dialogo(`<div class="dlg">
-      <div class="dlg-head"><h2>Notificações</h2><button class="icon-btn" data-x aria-label="Fechar">${ic('x')}</button></div>
-      ${lista.length ? `<div class="notif-list">${lista.map((n) => `<button class="notif ${n.lida ? '' : 'unread'}" data-n="${n.id}">
-          <span class="n-title">${h(n.titulo)}</span><span class="n-text">${h(n.texto)}</span><span class="n-time">${dataHora(n.criado_em)}</span></button>`).join('')}</div>`
-        : '<p class="muted">Nenhuma notificação ainda. Você será avisado aqui a cada movimentação dos pedidos.</p>'}
-      <div class="dlg-foot">${lista.some((n) => !n.lida) ? '<button class="btn btn-ghost" data-todas>Marcar todas como lidas</button>' : ''}</div>
-    </div>`);
-    $('[data-x]', d).onclick = () => d.close();
-    const todas = $('[data-todas]', d); if (todas) todas.onclick = () => { Store.marcarLidas(lista.filter((n) => !n.lida).map((n) => n.id)); d.close(); };
-    $$('[data-n]', d).forEach((b) => (b.onclick = () => {
-      const n = lista.find((x) => String(x.id) === b.dataset.n);
-      if (!n.lida) Store.marcarLidas([n.id]);
-      d.close();
-      if (n.link) { location.hash = n.link; return; }
-      const [sec, p] = destinoNotificacao(n); ir(sec, p);
-    }));
+    const d = dialogo(`<div class="dlg" id="notif-dlg"></div>`);
+    const corpo = $('#notif-dlg', d);
+    function desenhar() {
+      const lista = S.notifs;
+      const lidas = lista.filter((n) => n.lida);
+      corpo.innerHTML = `
+        <div class="dlg-head"><h2>Notificações</h2><button class="icon-btn" data-x aria-label="Fechar">${ic('x')}</button></div>
+        ${lista.length ? `<div class="notif-list">${lista.map((n) => `<div class="notif-row">
+            <button class="notif ${n.lida ? '' : 'unread'}" data-n="${n.id}">
+              <span class="n-title">${h(n.titulo)}</span><span class="n-text">${h(n.texto)}</span><span class="n-time">${dataHora(n.criado_em)}${n.lida ? ' · Vista' : ''}</span></button>
+            <button class="icon-btn n-del" data-del="${n.id}" aria-label="Apagar notificação" title="Apagar">${ic('trash', 18)}</button></div>`).join('')}</div>`
+          : '<p class="muted">Nenhuma notificação. Você será avisado aqui a cada movimentação dos pedidos.</p>'}
+        <div class="dlg-foot">
+          ${lidas.length ? `<button class="btn btn-ghost" data-apagar-lidas>${ic('trash', 18)} Apagar as vistas (${lidas.length})</button>` : ''}
+          ${lista.some((n) => !n.lida) ? '<button class="btn btn-ghost" data-todas>Marcar todas como vistas</button>' : ''}</div>`;
+      $('[data-x]', corpo).onclick = () => d.close();
+      const todas = $('[data-todas]', corpo); if (todas) todas.onclick = async () => { await Store.marcarLidas(lista.filter((n) => !n.lida).map((n) => n.id)); desenhar(); };
+      const apl = $('[data-apagar-lidas]', corpo); if (apl) apl.onclick = async () => {
+        const ids = lidas.map((n) => n.id);
+        await Store.apagarNotificacoes(ids); desenhar();
+        toast(ids.length > 1 ? `${ids.length} notificações apagadas.` : 'Notificação apagada.');
+      };
+      $$('[data-del]', corpo).forEach((b) => (b.onclick = async () => { await Store.apagarNotificacoes([lista.find((x) => String(x.id) === b.dataset.del).id]); desenhar(); }));
+      $$('[data-n]', corpo).forEach((b) => (b.onclick = () => {
+        const n = lista.find((x) => String(x.id) === b.dataset.n);
+        if (!n.lida) Store.marcarLidas([n.id]);
+        d.close();
+        if (n.link) { location.hash = n.link; return; }
+        const [sec, p] = destinoNotificacao(n); ir(sec, p);
+      }));
+    }
+    desenhar();
   }
 
   let eventoInstalar = null;

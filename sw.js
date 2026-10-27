@@ -1,5 +1,5 @@
 /* Service worker: deixa o app abrir e funcionar sem internet */
-const VERSAO = 'compras-v6';
+const VERSAO = 'compras-v7';
 const ARQUIVOS = [
   './', 'index.html', 'styles.css', 'config.js', 'js/store.js', 'js/app.js',
   'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png',
@@ -7,7 +7,8 @@ const ARQUIVOS = [
 const CDNS = ['cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS)).then(() => self.skipWaiting()));
+  // 'reload': pega os arquivos direto do servidor, nunca uma cópia antiga guardada pelo navegador
+  e.waitUntil(caches.open(VERSAO).then((c) => c.addAll(ARQUIVOS.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
   e.waitUntil(caches.keys().then((ks) => Promise.all(ks.filter((k) => k !== VERSAO).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
@@ -34,12 +35,12 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
-  // Arquivos do próprio app: tenta a versão nova, senão usa a guardada
+  // Arquivos do próprio app: sempre confere no servidor se há versão nova; sem internet, usa a guardada
   if (url.origin === self.location.origin) {
     e.respondWith((async () => {
       const c = await caches.open(VERSAO);
       try {
-        const r = await comTempo(fetch(req), 4000);
+        const r = await comTempo(fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }), 4000);
         if (r.ok) c.put(req, r.clone());
         return r;
       } catch (_) {

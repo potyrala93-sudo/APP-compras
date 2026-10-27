@@ -473,3 +473,23 @@ dialog::backdrop { background: rgba(10, 20, 15, .5); }
 .sub { font-weight: 650; font-size: .9rem; margin-bottom: 6px; }
 .steps { margin: 0; padding-left: 20px; display: grid; gap: 6px; }
 hr.sep { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* Botão para voltar ao menu dos apps (Apps SMA) */
+.menu-btn { display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 10px; margin-left: -4px; border-radius: 10px; border: 1px solid var(--line); color: var(--ink); background: var(--surface); text-decoration: none; font-weight: 700; font-size: .85rem; flex: none; }
+.menu-btn:hover { background: var(--surface-2); }
+@media (max-width: 370px) { .menu-btn span { display: none; } .menu-btn { padding: 0 9px; } }
+.menu-link { display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 6px 2px; color: var(--muted); font-weight: 700; text-decoration: none; }
+.menu-link:hover { color: var(--ink); }
+.topbar .brand { min-width: 0; flex: 0 1 auto; }
+.topbar .brand .cdc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ---------- Apagar notificações, editar e apagar pedidos ---------- */
+.notif-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 2px; border-radius: var(--radius-m); }
+.notif-row:hover { background: var(--surface-2); }
+.notif-row .notif:hover { background: none; }
+.notif-row .n-del { color: var(--muted); margin-top: 4px; width: 40px; height: 40px; }
+.notif-row .n-del:hover { color: var(--danger); background: var(--danger-bg, var(--surface-2)); }
+.btn-apagar { color: var(--danger); }
+.btn-apagar:hover { background: var(--danger-bg, var(--surface-2)); }
+.order-head .grow { flex: 1; }
+button.t-act { background: none; border: 0; font: inherit; cursor: pointer; padding: 0; }
